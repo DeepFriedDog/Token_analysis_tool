@@ -1,7 +1,9 @@
 export interface PriceData {
-  timestamp: string;
-  close: number;
-  volume?: number;
+  current_price: number;
+  price_history: Array<{
+    timestamp: string;
+    price: number;
+  }>;
 }
 
 export interface DCAStrategyData {
@@ -21,38 +23,30 @@ export interface DCAStrategyData {
 }
 
 export interface TechnicalAnalysis {
-  support_levels: number[];
-  resistance_levels: number[];
-  rsi: number;
-  volatility: number;
-  fibonacci_levels: Array<{
-    level: number;
-    price: number;
-    type: string;
-  }>;
-  advanced_indicators: AdvancedIndicators;
-  trend_analysis?: {
-    primary_trend: 'bullish' | 'bearish' | 'neutral';
+  trend_analysis: {
+    primary_trend: string;
     strength: number;
-    key_levels: {
-      major_support: number;
-      major_resistance: number;
-      breakout_target: number;
-      breakdown_target: number;
-    };
   };
-  dca_recommendations?: {
+  dca_recommendations: {
     entry_zones: Array<{
-      price: number;
-      strength: number;
+      price_level: number;
       confidence: number;
-      reasoning: string[];
+      allocation: number;
+      reasoning?: string[];
     }>;
     risk_assessment: {
       overall_risk: number;
       key_risks: string[];
-      mitigations: string[];
     };
+  };
+  support_levels: number[];
+  resistance_levels: number[];
+  rsi: number;
+  volatility: number;
+  macd: {
+    line: number;
+    signal: number;
+    histogram: number;
   };
 }
 
@@ -107,9 +101,6 @@ export interface AdvancedDCAStrategy {
 }
 
 export interface AnalysisResult {
-  priceData: PriceData[];
-  technical_analysis: TechnicalAnalysis & {
-    advanced_indicators: AdvancedIndicators;
-  };
-  dca_strategy?: AdvancedDCAStrategy;
+  priceData: PriceData;
+  technical_analysis: TechnicalAnalysis;
 } 

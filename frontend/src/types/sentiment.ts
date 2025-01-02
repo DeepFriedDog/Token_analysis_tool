@@ -38,9 +38,32 @@ export interface SentimentAnalysis {
       }>;
     }>;
   };
+  advanced_metrics?: {
+    top_users: Array<{
+      user_id: string;
+      message_count: number;
+      reaction_count: number;
+      engagement_score: number;
+    }>;
+    reaction_stats: Array<{
+      reaction: string;
+      count: number;
+      percentage: number;
+    }>;
+    activity_patterns: {
+      daily_active_users: number;
+      weekly_active_users: number;
+      monthly_active_users: number;
+      peak_activity_days: Array<{
+        day: string;
+        message_count: number;
+      }>;
+    };
+  };
 }
 
 export interface SentimentAnalysisParams {
   telegram_channel: string;
   interval_days: number;
-} 
+  advanced_analysis: boolean;
+}

@@ -1,8 +1,6 @@
 import axios from 'axios';
-import { AnalysisResult } from '../types/analysis';
+import { AnalysisParams, AnalysisResult, SentimentAnalysis, SentimentAnalysisParams } from '../types';
 import env from '../config/env';
-import { SentimentAnalysis, SentimentAnalysisParams } from '../types/sentiment';
-import React, { useState } from 'react';
 
 const api = axios.create({
   baseURL: env.API_URL,
@@ -10,13 +8,6 @@ const api = axios.create({
     'Content-Type': 'application/json',
   },
 });
-
-export interface AnalysisParams {
-  contractAddress: string;
-  timeframe: string;
-  intervalDays: number;
-  investmentAmount: number;
-}
 
 export const analyzeToken = async (params: AnalysisParams): Promise<AnalysisResult> => {
   try {
@@ -39,7 +30,7 @@ export const analyzeToken = async (params: AnalysisParams): Promise<AnalysisResu
       throw new Error('Invalid response format from API');
     }
     
-    return data;
+    return data as AnalysisResult;
   } catch (error) {
     if (axios.isAxiosError(error)) {
       const errorMessage = error.response?.data?.detail || error.response?.data?.error || 'Analysis failed';
@@ -55,14 +46,36 @@ export const analyzeSentiment = async (params: SentimentAnalysisParams): Promise
       telegram_channel: params.telegram_channel,
       interval_days: params.interval_days
     };
-    
+
+    console.log('API Request:', requestData);
     const { data } = await api.post('/api/analyze-sentiment', requestData);
+    console.log('API Response:', data);
     
     if (data.error) {
       throw new Error(data.error);
     }
     
-    return data;
+    if (!data.channel_stats || 
+        !data.sentiment_metrics || 
+        !data.engagement_metrics || 
+        !data.topic_analysis) {
+      throw new Error('Invalid response format from API');
+    }
+    
+    if (typeof data.channel_stats.total_members === 'undefined' ||
+        typeof data.channel_stats.active_members === 'undefined' ||
+        typeof data.channel_stats.messages_per_day === 'undefined') {
+      throw new Error('Missing required channel statistics');
+    }
+    
+    if (typeof data.sentiment_metrics.positive_percentage === 'undefined' ||
+        typeof data.sentiment_metrics.negative_percentage === 'undefined' ||
+        typeof data.sentiment_metrics.neutral_percentage === 'undefined' ||
+        !Array.isArray(data.sentiment_metrics.sentiment_trend)) {
+      throw new Error('Missing required sentiment metrics');
+    }
+    
+    return data as SentimentAnalysis;
   } catch (error) {
     if (axios.isAxiosError(error)) {
       const errorMessage = error.response?.data?.detail || error.response?.data?.error || 'Sentiment analysis failed';

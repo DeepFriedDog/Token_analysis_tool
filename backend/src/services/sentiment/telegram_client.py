@@ -54,69 +54,100 @@ class TelegramAnalyzer:
                 print(f"[Telegram] ❌ Error during initialization: {str(e)}")
                 raise
 
-    async def analyze_channel(self, channel_url: str, days: int = 30) -> dict:
+    async def analyze_channel(self, channel_url: str, days: int = 30, advanced_mode: bool = False) -> dict:
         await self.ensure_initialized()
         
         try:
-            channel = channel_url.replace('https://t.me/', '')
-            channel = channel.replace('@', '')
-            channel = channel.strip('/')
-            
-            print(f"[Telegram] 🔍 Analyzing channel: {channel}")
+            channel = channel_url.replace('https://t.me/', '').replace('@', '').replace('t.me/', '').strip('/')
+            print(f"[Telegram] 🔍 Analyzing channel: {channel} for the past {days} days")
+            print(f"[Telegram] 📊 Mode: {'Advanced' if advanced_mode else 'Basic'}")
             
             async with self.client:
-                try:
-                    channel_entity = await self.client.get_entity(channel)
-                except ValueError as e:
-                    print(f"[Telegram] ❌ Could not find channel: {channel}")
-                    raise ValueError(f"Channel not found: {channel}") from e
-                    
+                channel_entity = await self._get_channel_entity(channel)
                 full_channel = await self.client(GetFullChannelRequest(channel=channel_entity))
                 
                 end_date = datetime.now(pytz.UTC)
                 start_date = end_date - timedelta(days=days)
                 
-                messages = []
-                print(f"[Telegram] 📥 Fetching messages from {start_date.strftime('%Y-%m-%d %H:%M:%S')}")
+                messages = await self._fetch_messages(channel_entity, start_date, end_date)
                 
-                async for message in self.client.iter_messages(
-                    channel_entity,
-                    limit=None,
-                    offset_date=start_date,
-                    wait_time=2
-                ):
-                    if not message or not message.text:
-                        continue
-                        
-                    if message.date < start_date:
-                        continue
-                        
-                    if message.date > end_date:
-                        continue
-                    
-                    messages.append({
-                        'text': message.text,
-                        'date': message.date,
-                        'views': message.views or 0,
-                        'sender_id': message.sender_id,
-                        'forwards': message.forwards or 0
-                    })
-                    
-                    if len(messages) % 50 == 0:
-                        print(f"[Telegram] 📥 Fetched {len(messages)} messages...")
-                
-                print(f"[Telegram] ✅ Fetched total {len(messages)} messages")
-                
-                # Calculate metrics
                 total_members = full_channel.full_chat.participants_count
-                active_members = len(set(m['sender_id'] for m in messages if m['sender_id'] is not None))
-                messages_per_day = len(messages) / days if days > 0 else 0
-
-                return await self._analyze_messages(messages, total_members, active_members, messages_per_day)
-            
+                
+                # Basic mode just counts unique senders
+                if not advanced_mode:
+                    active_members = len(set(m['sender_id'] for m in messages if m['sender_id'] is not None))
+                    messages_per_day = len(messages) / days if days > 0 else 0
+                else:
+                    # Advanced mode includes full participant analysis
+                    active_members = await self._get_active_members(channel_entity, start_date)
+                    messages_per_day = (len(messages) / days / active_members) if days > 0 and active_members > 0 else 0
+                
+                result = await self._analyze_messages(messages, total_members, active_members, messages_per_day)
+                
+                if advanced_mode:
+                    advanced_metrics = await self._analyze_advanced_metrics(channel_entity, messages, start_date)
+                    result['advanced_metrics'] = advanced_metrics
+                
+                return result
+                
         except Exception as e:
             print(f"[Telegram] ❌ Error during analysis: {str(e)}")
             raise
+
+    async def _analyze_advanced_metrics(self, channel_entity, messages: list, start_date: datetime) -> dict:
+        print("[Telegram] 📊 Calculating advanced metrics...")
+        
+        # Analyze user activity
+        user_stats = defaultdict(lambda: {'message_count': 0, 'reaction_count': 0})
+        for msg in messages:
+            if msg['sender_id']:
+                user_stats[msg['sender_id']]['message_count'] += 1
+                # Count reactions if available
+                if hasattr(msg, 'reactions') and msg['reactions']:
+                    user_stats[msg['sender_id']]['reaction_count'] += len(msg['reactions'])
+        
+        # Calculate engagement scores and sort users
+        top_users = []
+        for user_id, stats in user_stats.items():
+            engagement_score = stats['message_count'] + (stats['reaction_count'] * 0.5)
+            top_users.append({
+                'user_id': str(user_id),
+                'message_count': stats['message_count'],
+                'reaction_count': stats['reaction_count'],
+                'engagement_score': engagement_score
+            })
+        
+        top_users.sort(key=lambda x: x['engagement_score'], reverse=True)
+        
+        # Get reaction statistics
+        reaction_counter = Counter()
+        total_reactions = 0
+        for msg in messages:
+            if hasattr(msg, 'reactions') and msg['reactions']:
+                for reaction in msg['reactions']:
+                    reaction_counter[reaction] += 1
+                    total_reactions += 1
+        
+        reaction_stats = [
+            {
+                'reaction': reaction,
+                'count': count,
+                'percentage': (count / total_reactions * 100) if total_reactions > 0 else 0
+            }
+            for reaction, count in reaction_counter.most_common(10)
+        ]
+        
+        print("[Telegram] ✅ Advanced metrics calculation complete")
+        
+        return {
+            'top_users': top_users[:10],  # Limit to top 10 users
+            'reaction_stats': reaction_stats,
+            'activity_patterns': {
+                'daily_active_users': len(set(m['sender_id'] for m in messages if m['date'] > datetime.now(pytz.UTC) - timedelta(days=1))),
+                'weekly_active_users': len(set(m['sender_id'] for m in messages if m['date'] > datetime.now(pytz.UTC) - timedelta(days=7))),
+                'monthly_active_users': len(set(m['sender_id'] for m in messages if m['date'] > datetime.now(pytz.UTC) - timedelta(days=30)))
+            }
+        }
 
     def _calculate_growth_rate(self, participants, days: int) -> float:
         total_members = participants.count
@@ -157,9 +188,9 @@ class TelegramAnalyzer:
         hour_counts = defaultdict(int)
         for msg in messages:
             hour_counts[msg['date'].hour] += 1
-            
+
         total_messages = sum(hour_counts.values())
-        
+    
         # Get top 5 peak hours with percentages
         peak_hours = sorted(hour_counts.items(), key=lambda x: x[1], reverse=True)[:5]
         return [
@@ -197,7 +228,7 @@ class TelegramAnalyzer:
                 date_key = msg['date'].date().isoformat()
                 topics_by_date[date_key].update(msg_words)
             except Exception as e:
-                print(f"[Telegram] ⚠️ Skipping message due to processing error")
+                print(f"[Telegram] ⚠️ Skipping message due to processing error: {str(e)}")
                 continue
         
         # Get overall top topics with sentiment
@@ -295,3 +326,84 @@ class TelegramAnalyzer:
             'engagement_rate': sum(m['views'] or 0 for m in messages) / len(messages),
             'peak_hours': [hour for hour, _ in peak_hours]
         } 
+
+    async def _get_active_members(self, channel_entity, start_date: datetime) -> int:
+        try:
+            print("[Telegram] 📊 Calculating active members...")
+            participants = await self.client.get_participants(channel_entity, limit=None)
+            total_participants = len(participants)
+            active_count = 0
+            processed = 0
+            
+            for participant in participants:
+                try:
+                    messages = await self.client.get_messages(
+                        channel_entity,
+                        from_user=participant,
+                        offset_date=start_date,
+                        limit=1
+                    )
+                    if messages and len(messages) > 0:
+                        active_count += 1
+                    
+                    processed += 1
+                    if processed % 50 == 0:
+                        print(f"[Telegram] 👥 Processed {processed}/{total_participants} participants...")
+                        
+                except Exception as e:
+                    print(f"[Telegram] ⚠️ Error checking participant activity: {str(e)}")
+                    continue
+                
+            print(f"[Telegram] ✅ Found {active_count} active members out of {total_participants}")
+            return active_count
+        except Exception as e:
+            print(f"[Telegram] ❌ Error calculating active members: {str(e)}")
+            return 0 
+
+    async def _get_channel_entity(self, channel: str):
+        try:
+            print(f"[Telegram] 🔍 Getting channel entity for: {channel}")
+            try:
+                channel_entity = await self.client.get_entity(channel)
+            except ValueError as e:
+                print(f"[Telegram] ❌ Could not find channel: {channel}")
+                raise ValueError(f"Channel not found: {channel}") from e
+            
+            return channel_entity
+        except Exception as e:
+            print(f"[Telegram] ❌ Error getting channel entity: {str(e)}")
+            raise 
+
+    async def _fetch_messages(self, channel_entity, start_date: datetime, end_date: datetime) -> list:
+        try:
+            print(f"[Telegram] 📥 Fetching messages from {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}")
+            messages = []
+            
+            async for message in self.client.iter_messages(
+                channel_entity,
+                offset_date=end_date,
+                limit=None
+            ):
+                if message.date < start_date:
+                    break
+                    
+                if not message.text:
+                    continue
+                    
+                messages.append({
+                    'text': message.text,
+                    'date': message.date,
+                    'views': getattr(message, 'views', 0),
+                    'sender_id': message.sender_id,
+                    'reactions': getattr(message, 'reactions', [])
+                })
+                
+                if len(messages) % 100 == 0:
+                    print(f"[Telegram] 📝 Fetched {len(messages)} messages...")
+                    
+            print(f"[Telegram] ✅ Successfully fetched {len(messages)} messages")
+            return messages
+            
+        except Exception as e:
+            print(f"[Telegram] ❌ Error fetching messages: {str(e)}")
+            raise 

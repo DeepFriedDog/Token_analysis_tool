@@ -1,6 +1,7 @@
 import React from 'react';
 import { StatCard } from './StatCard';
 import { SentimentAnalysis as SentimentData } from '../types/sentiment';
+import { AdvancedMetrics } from './AdvancedMetrics';
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, 
   CartesianGrid, Tooltip, ResponsiveContainer
@@ -16,12 +17,16 @@ export const SentimentAnalysis: React.FC<Props> = ({ data, loading }) => {
     return <div className="animate-pulse">Loading sentiment analysis...</div>;
   }
 
+  const activeUsersPercentage = data.channel_stats.total_members > 0
+    ? Number(((data.channel_stats.active_members / data.channel_stats.total_members) * 100).toFixed(1))
+    : 0;
+
   return (
     <div className="space-y-6 p-4">
       <h2 className="text-2xl font-bold">Community Sentiment Analysis</h2>
       
       {/* Channel Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <StatCard
           title="Total Members"
           value={data.channel_stats.total_members}
@@ -33,8 +38,13 @@ export const SentimentAnalysis: React.FC<Props> = ({ data, loading }) => {
           type="number"
         />
         <StatCard
-          title="Messages/Day"
-          value={data.channel_stats.messages_per_day}
+          title="Active Members %"
+          value={activeUsersPercentage}
+          type="number"
+        />
+        <StatCard
+          title="Avg Messages/Day/User"
+          value={Number(data.channel_stats.messages_per_day.toFixed(1))}
           type="number"
         />
       </div>
@@ -47,22 +57,25 @@ export const SentimentAnalysis: React.FC<Props> = ({ data, loading }) => {
             <BarChart data={[
               {
                 name: 'Positive',
-                value: data.sentiment_metrics.positive_percentage
+                value: data.sentiment_metrics.positive_percentage,
+                fill: '#22c55e'  // Green
               },
               {
                 name: 'Neutral',
-                value: data.sentiment_metrics.neutral_percentage
+                value: data.sentiment_metrics.neutral_percentage,
+                fill: '#3b82f6'  // Blue
               },
               {
                 name: 'Negative',
-                value: data.sentiment_metrics.negative_percentage
+                value: data.sentiment_metrics.negative_percentage,
+                fill: '#ef4444'  // Red
               }
             ]}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="name" />
               <YAxis />
               <Tooltip />
-              <Bar dataKey="value" fill="#4F46E5" />
+              <Bar dataKey="value" />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -80,6 +93,14 @@ export const SentimentAnalysis: React.FC<Props> = ({ data, loading }) => {
           ))}
         </div>
       </div>
+
+      {/* Advanced Metrics (conditionally rendered) */}
+      {data.advanced_metrics && (
+        <div>
+          <h2 className="text-2xl font-bold mb-4">Advanced Community Insights</h2>
+          <AdvancedMetrics advancedMetrics={data.advanced_metrics} />
+        </div>
+      )}
     </div>
   );
 }; 
