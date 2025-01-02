@@ -20,7 +20,7 @@ interface TimeframeSelectorProps {
 export const TimeframeSelector: React.FC<TimeframeSelectorProps> = ({
   timeframe,
   intervalDays,
-  investmentAmount,
+  investmentAmount = 100,
   onChange,
   errors,
   disabled

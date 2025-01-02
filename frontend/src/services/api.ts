@@ -32,11 +32,19 @@ export const analyzeToken = async (params: AnalysisParams): Promise<AnalysisResu
     
     return data as AnalysisResult;
   } catch (error) {
+    console.error('Full error:', error);
+    
     if (axios.isAxiosError(error)) {
-      const errorMessage = error.response?.data?.detail || error.response?.data?.error || 'Analysis failed';
-      throw new Error(errorMessage);
+      if (error.response?.status === 422) {
+        throw new Error('Invalid input parameters. Please check your contract address and other inputs.');
+      }
+      const message = error.response?.data?.detail || 
+                     error.response?.data?.error || 
+                     error.message ||
+                     'Analysis failed';
+      throw new Error(message);
     }
-    throw error;
+    throw new Error('An unexpected error occurred during analysis');
   }
 };
 

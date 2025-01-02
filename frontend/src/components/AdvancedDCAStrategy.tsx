@@ -1,64 +1,50 @@
 import React from 'react';
-import type { AdvancedDCAStrategy as AdvancedDCAStrategyType } from '../types/analysis';
-import { formatPrice, formatPercentage } from '../utils/formatters';
+import { formatPrice, formatPercentage } from '../utils/format';
 
 interface Props {
-  strategy: AdvancedDCAStrategyType;
+  strategy: {
+    signals: Array<{
+      price: number;
+      signal_strength: number;
+      position_size: number;
+    }>;
+  };
   investmentAmount: number;
 }
 
 export const AdvancedDCAStrategy: React.FC<Props> = ({ strategy, investmentAmount }) => {
-  if (!strategy || !strategy.indicator_signals) {
-    return (
-      <div className="bg-white rounded-lg shadow p-6">
-        <h2 className="text-2xl font-bold mb-4">Advanced DCA Strategy</h2>
-        <p className="text-gray-500">No strategy data available</p>
-      </div>
-    );
-  }
-
-  // Calculate adjusted position sizes based on signal strength
-  const totalSignalStrength = strategy.signals?.reduce((sum, signal) => sum + signal.signal_strength, 0) || 1;
-  const adjustedSignals = strategy.signals?.map(signal => ({
-    ...signal,
-    position_size: Number(((investmentAmount * signal.signal_strength) / totalSignalStrength).toFixed(2))
-  }));
-
-  // Ensure total matches investment amount exactly by adjusting last position
-  if (adjustedSignals && adjustedSignals.length > 0) {
-    const currentTotal = adjustedSignals.reduce((sum, signal) => sum + signal.position_size, 0);
-    const difference = investmentAmount - currentTotal;
-    adjustedSignals[adjustedSignals.length - 1].position_size += Number(difference.toFixed(2));
-  }
+  if (!strategy?.signals?.length) return null;
 
   return (
-    <div className="bg-white rounded-lg shadow p-6">
-      <h2 className="text-2xl font-bold mb-4">Advanced DCA Strategy</h2>
+    <div className="bg-white p-6 rounded-lg shadow mb-8">
+      <h2 className="text-xl font-semibold mb-4">Advanced DCA Strategy</h2>
       
-      {/* Entry Signals */}
-      {adjustedSignals && adjustedSignals.length > 0 && (
-        <div className="mb-6">
-          <h3 className="text-lg font-semibold mb-2">Entry Signals</h3>
-          <div className="space-y-2">
-            {adjustedSignals.map((signal, index) => (
-              <div key={index} className="border rounded p-3">
-                <div className="flex justify-between mb-2">
-                  <span>Price: ${formatPrice(signal.price)}</span>
-                  <span className="font-semibold">
-                    Strength: {formatPercentage(signal.signal_strength)}
-                  </span>
-                </div>
-                <div className="text-sm text-gray-600">
-                  Position Size: ${signal.position_size}
-                </div>
+      <div className="space-y-2">
+        {strategy.signals.map((signal, index) => (
+          <div key={index} className="flex justify-between items-center py-1">
+            <div>
+              <div className="flex flex-col">
+                <span>Price: ${formatPrice(signal.price)}</span>
+                <span className="text-sm text-gray-500">Position Size: ${formatPrice(signal.position_size)}</span>
               </div>
-            ))}
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs font-medium">
+                Strength: {formatPercentage(signal.signal_strength)}
+              </span>
+              <div className="w-16 bg-gray-200 rounded-full h-1">
+                <div 
+                  className="bg-green-500 h-1 rounded-full"
+                  style={{ width: `${signal.signal_strength * 100}%` }}
+                />
+              </div>
+            </div>
           </div>
-          <div className="mt-3 text-sm text-gray-500">
-            Total Investment: ${investmentAmount}
-          </div>
+        ))}
+        <div className="text-sm text-gray-500 mt-4 pt-3 border-t">
+          Total Investment: ${formatPrice(investmentAmount)}
         </div>
-      )}
+      </div>
     </div>
   );
 }; 

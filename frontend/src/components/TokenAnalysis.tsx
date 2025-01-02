@@ -3,8 +3,20 @@ import { analyzeToken, analyzeSentiment } from '../services/api';
 import { AnalysisParams, AnalysisResult } from '../types';
 import { SentimentAnalysis, SentimentAnalysisParams } from '../types/sentiment';
 import env from '../config/env';
-import { TechnicalRecommendations } from './TechnicalRecommendations';
 import { SentimentAnalysis as SentimentDisplay } from './SentimentAnalysis';
+import { TimeframeSelector } from './TimeframeSelector';
+import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
+import { TechnicalIndicators } from './TechnicalIndicators';
+import { TechnicalAnalysis } from '../types/analysis';
+import { SignalStatus } from './SignalStatus';
+import { AdvancedIndicators } from './AdvancedIndicators';
+import { AdvancedDCAStrategy } from './AdvancedDCAStrategy';
+import { ExitSignals } from './ExitSignals';
+import { transformDCARecommendations, transformAdvancedDCAStrategy } from '../utils/transformers';
+import { PriceChart } from './PriceChart';
+import { EntryZones } from './EntryZones';
+import { validateAnalysisParams } from '../utils/validation';
+import { getTechnicalSignals } from '../utils/technicalSignals';
 
 export const TokenAnalysis: React.FC = () => {
   const [analysisParams, setAnalysisParams] = useState<AnalysisParams>({
@@ -13,168 +25,92 @@ export const TokenAnalysis: React.FC = () => {
     intervalDays: 30,
     investmentAmount: 100,
   });
-  const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [progress, setProgress] = useState<string[]>([]);
+
   const [sentimentParams, setSentimentParams] = useState<SentimentAnalysisParams>({
     telegram_channel: '',
     interval_days: 30,
-    advanced_analysis: false
+    advanced_analysis: true
   });
+  
+  const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
   const [sentimentData, setSentimentData] = useState<SentimentAnalysis | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [progress, setProgress] = useState<string[]>([]);
+  const [sentimentLoading, setSentimentLoading] = useState(false);
 
   // Handle price & technical analysis
   const handleAnalyzeToken = async () => {
-    let ws: WebSocket | null = null;
     try {
       setLoading(true);
       setError(null);
-      setProgress([]);
-
-      // (Optional) open WebSocket connection for progress updates.
-      try {
-        ws = new WebSocket(`${env.WS_URL}/ws/analysis`);
-        ws.onmessage = (event) => {
-          const message = JSON.parse(event.data);
-          if (message.type === 'progress') {
-            setProgress((prev) => [...prev, message.data]);
-          }
-        };
-      } catch (wsError) {
-        console.warn('WebSocket connection failed:', wsError);
-      }
-
-      console.log('Sending token analysis request with params:', analysisParams);
+      
       const result = await analyzeToken(analysisParams);
-
-      if (!result || !result.priceData || !result.technical_analysis) {
-        throw new Error('Invalid response format from API');
+      console.log('Raw API Response:', result);
+      
+      if (!Array.isArray(result?.priceData)) {
+        throw new Error('Invalid price data received');
       }
-
-      setAnalysisResult(result);
-    } catch (error: any) {
-      setError(error.message || 'Analysis failed');
+      
+      // Transform the price data to match the PriceChart component's interface
+      const transformedResult = {
+        ...result,
+        priceData: {
+          current_price: Number(result.priceData[result.priceData.length - 1]?.close) || 0,
+          price_history: result.priceData.map(point => ({
+            timestamp: point.timestamp,
+            price: Number(point.close)
+          }))
+        }
+      };
+      
+      console.log('Transformed result:', transformedResult);
+      setAnalysisResult(transformedResult);
+      
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Analysis failed';
+      setError(errorMessage);
       console.error('Token analysis error:', error);
     } finally {
       setLoading(false);
-      if (ws) {
-        ws.close();
-      }
     }
   };
 
-  // Handle sentiment analysis only
+  // Separate handler for sentiment analysis
   const handleAnalyzeSentiment = async () => {
     try {
-      setLoading(true);
+      setSentimentLoading(true);
       setError(null);
-
-      if (!sentimentParams.telegram_channel) {
-        setError('Please provide a Telegram channel to analyze.');
-        return;
-      }
-
-      console.log('Sending sentiment analysis request with params:', sentimentParams);
-      const sentimentResult = await analyzeSentiment(sentimentParams);
-      setSentimentData(sentimentResult);
-    } catch (error: any) {
-      setError(error.message || 'Sentiment analysis failed');
-      console.error('Sentiment analysis error:', error);
+      
+      const result = await analyzeSentiment(sentimentParams);
+      setSentimentData(result);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to analyze sentiment');
     } finally {
-      setLoading(false);
+      setSentimentLoading(false);
     }
   };
 
   return (
-    <div className="space-y-8">
-      <div className="bg-white rounded-lg shadow p-6">
-        <h2 className="text-2xl font-bold mb-6">Token Analysis</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Contract Address
-              </label>
-              <input
-                type="text"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
-                value={analysisParams.contractAddress}
-                onChange={(e) =>
-                  setAnalysisParams({ ...analysisParams, contractAddress: e.target.value })
-                }
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Timeframe
-              </label>
-              <select
-                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
-                value={analysisParams.timeframe}
-                onChange={(e) => setAnalysisParams({ ...analysisParams, timeframe: e.target.value })}
-              >
-                <option value="15m">15m</option>
-                <option value="1h">1h</option>
-                <option value="4h">4h</option>
-                <option value="1d">1d</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Interval Days
-              </label>
-              <input
-                type="number"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
-                value={analysisParams.intervalDays}
-                onChange={(e) =>
-                  setAnalysisParams({ ...analysisParams, intervalDays: parseInt(e.target.value, 10) })
-                }
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Investment Amount
-              </label>
-              <input
-                type="number"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
-                value={analysisParams.investmentAmount}
-                onChange={(e) =>
-                  setAnalysisParams({ ...analysisParams, investmentAmount: parseFloat(e.target.value) })
-                }
-              />
-            </div>
-
-            <button
-              onClick={handleAnalyzeToken}
-              disabled={loading}
-              className="w-full px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
-            >
-              Analyze Token
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <div className="bg-white rounded-lg shadow p-6">
-        <h2 className="text-2xl font-bold mb-6">Telegram Sentiment</h2>
-        <div className="space-y-4">
+    <div className="space-y-6">
+      {/* Sentiment Analysis Section */}
+      <div className="bg-white p-6 rounded-lg shadow">
+        <h2 className="text-xl font-semibold mb-4">Telegram Sentiment</h2>
+        
+        <div className="space-y-4 mb-6">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Telegram Channel
             </label>
             <input
               type="text"
-              className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
               value={sentimentParams.telegram_channel}
-              onChange={(e) =>
-                setSentimentParams({ ...sentimentParams, telegram_channel: e.target.value })
-              }
+              onChange={(e) => setSentimentParams(prev => ({
+                ...prev,
+                telegram_channel: e.target.value
+              }))}
+              className="w-full p-2 border rounded focus:ring-blue-500 focus:border-blue-500"
+              placeholder="t.me/channel_name"
             />
           </div>
 
@@ -184,97 +120,182 @@ export const TokenAnalysis: React.FC = () => {
             </label>
             <input
               type="number"
-              className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
               value={sentimentParams.interval_days}
-              onChange={(e) =>
-                setSentimentParams({ ...sentimentParams, interval_days: parseInt(e.target.value, 10) })
-              }
+              onChange={(e) => setSentimentParams(prev => ({
+                ...prev,
+                interval_days: Number(e.target.value)
+              }))}
+              className="w-full p-2 border rounded focus:ring-blue-500 focus:border-blue-500"
             />
           </div>
 
-          <div className="relative flex items-start mt-4">
-            <div className="flex items-center h-5">
-              <input
-                id="advanced-mode"
-                type="checkbox"
-                checked={sentimentParams.advanced_analysis}
-                onChange={(e) => 
-                  setSentimentParams({ ...sentimentParams, advanced_analysis: e.target.checked })
-                }
-                className="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
-              />
-            </div>
-            <div className="ml-3 text-sm">
-              <label htmlFor="advanced-mode" className="font-medium text-gray-700">
-                Advanced Sentiment Analysis
-              </label>
-              <p className="text-gray-500 group relative">
-                Enable detailed engagement metrics
-                <span className="invisible group-hover:visible absolute left-0 bottom-6 w-72 bg-gray-900 text-white text-xs rounded p-2">
-                  Advanced mode includes detailed member activity analysis, reaction patterns, and user engagement metrics. 
-                  This analysis takes significantly longer but provides comprehensive insights into community behavior.
-                  Features: member activity tracking, reaction analysis, engagement patterns, and user rankings.
-                </span>
-              </p>
-            </div>
+          <div className="flex items-center">
+            <input
+              type="checkbox"
+              id="advancedAnalysis"
+              checked={sentimentParams.advanced_analysis}
+              onChange={(e) => setSentimentParams(prev => ({
+                ...prev,
+                advanced_analysis: e.target.checked
+              }))}
+              className="h-4 w-4 text-blue-600 rounded"
+            />
+            <label htmlFor="advancedAnalysis" className="ml-2 text-sm text-gray-700">
+              Advanced Sentiment Analysis
+            </label>
           </div>
-
-          <button
-            onClick={handleAnalyzeSentiment}
-            disabled={loading}
-            className="w-full px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
-          >
-            Analyze Token Sentiment
-          </button>
         </div>
+
+        <button
+          onClick={handleAnalyzeSentiment}
+          disabled={sentimentLoading}
+          className="w-full py-2 px-4 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+        >
+          {sentimentLoading ? 'Analyzing Token Sentiment...' : 'Analyze Token Sentiment'}
+        </button>
       </div>
 
-      {error && (
-        <div className="bg-red-50 border-l-4 border-red-400 p-4">
-          <p className="text-red-700">{error}</p>
-        </div>
+      {/* Sentiment Analysis Results */}
+      {sentimentData && (
+        <SentimentDisplay 
+          data={sentimentData}
+          loading={sentimentLoading}
+        />
       )}
 
-      {loading && (
-        <div className="bg-blue-50 border-l-4 border-blue-400 p-4">
-          <p className="text-blue-700">Loading...</p>
-        </div>
-      )}
-
-      {progress.length > 0 && (
-        <div className="bg-gray-50 rounded-lg p-4">
-          {progress.map((p, idx) => (
-            <div key={idx} className="text-gray-600">{p}</div>
-          ))}
-        </div>
-      )}
-
-      {analysisResult && (
-        <div className="bg-white rounded-lg shadow p-6">
-          <TechnicalRecommendations 
-            analysis={{
-              trend_analysis: analysisResult.technical_analysis.trend_analysis,
-              dca_recommendations: analysisResult.technical_analysis.dca_recommendations,
-              support_levels: [],
-              resistance_levels: [],
-              rsi: 0,
-              volatility: 0,
-              macd: {
-                line: 0,
-                signal: 0,
-                histogram: 0
-              }
-            }}
-            currentPrice={analysisResult.priceData.current_price} 
+      {/* Token Analysis Section */}
+      <div className="bg-white p-6 rounded-lg shadow">
+        <h2 className="text-xl font-semibold mb-4">Token Analysis Settings</h2>
+        
+        {/* Token Analysis Inputs */}
+        <div className="space-y-4 mb-6">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Contract Address
+            </label>
+            <input
+              type="text"
+              value={analysisParams.contractAddress}
+              onChange={(e) => setAnalysisParams(prev => ({
+                ...prev,
+                contractAddress: e.target.value
+              }))}
+              className="w-full p-2 border rounded focus:ring-blue-500 focus:border-blue-500"
+              placeholder="0x..."
+            />
+          </div>
+          
+          <TimeframeSelector
+            timeframe={analysisParams.timeframe}
+            intervalDays={analysisParams.intervalDays}
+            investmentAmount={analysisParams.investmentAmount}
+            onChange={(updates) => 
+              setAnalysisParams(prev => ({ ...prev, ...updates }))
+            }
           />
         </div>
-      )}
 
-      {sentimentData && (
-        <div className="bg-white rounded-lg shadow p-6">
-          <SentimentDisplay data={sentimentData} loading={false} />
+        {/* Action Buttons */}
+        <div className="flex gap-4">
+          <button
+            onClick={handleAnalyzeToken}
+            disabled={loading}
+            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+          >
+            {loading ? 'Analyzing...' : 'Analyze Token'}
+          </button>
         </div>
+
+        {/* Error Display */}
+        {error && (
+          <div className="mt-4 p-3 bg-red-100 text-red-700 rounded">
+            {error}
+          </div>
+        )}
+
+        {/* Progress Display */}
+        {progress.length > 0 && (
+          <div className="mt-4 space-y-1">
+            {progress.map((msg, i) => (
+              <div key={i} className="text-sm text-gray-600">{msg}</div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Analysis Results Section */}
+      {analysisResult && analysisResult.priceData && (
+        <>
+          {/* Price Chart */}
+          <div className="mb-8">
+            <PriceChart 
+              data={{
+                current_price: analysisResult.priceData.current_price,
+                price_history: analysisResult.priceData.price_history || []
+              }} 
+            />
+          </div>
+
+          <div className="grid grid-cols-1 gap-6">
+            {/* DCA Strategy with Signal Status */}
+            <SignalStatus 
+              analysis={analysisResult?.technical_analysis}
+              currentPrice={analysisResult?.priceData.current_price}
+            />
+
+            {/* Technical Indicators */}
+            <TechnicalIndicators
+              analysis={analysisResult?.technical_analysis}
+              currentPrice={analysisResult?.priceData.current_price}
+            />
+
+            {/* Entry Zones */}
+            <EntryZones
+              zones={transformDCARecommendations(
+                analysisResult.technical_analysis,
+                analysisResult.priceData.current_price,
+                analysisParams.investmentAmount
+              ).entry_points}
+              currentPrice={analysisResult.priceData.current_price}
+            />
+
+            {/* Advanced Technical Analysis */}
+            <AdvancedIndicators
+              analysis={analysisResult?.technical_analysis}
+            />
+
+            {/* Advanced DCA Strategy */}
+            {analysisResult?.technical_analysis.dca_recommendations && (
+              <AdvancedDCAStrategy
+                strategy={transformAdvancedDCAStrategy(
+                  analysisResult.technical_analysis,
+                  analysisParams.investmentAmount
+                )}
+                investmentAmount={analysisParams.investmentAmount}
+              />
+            )}
+
+            {/* Exit Strategy */}
+            {analysisResult?.technical_analysis.exit_signals && (
+              <ExitSignals
+                signals={analysisResult.technical_analysis.exit_signals}
+                currentPrice={analysisResult.priceData.current_price}
+                technicalSignals={{
+                  macd: getTechnicalSignals(
+                    analysisResult.technical_analysis,
+                    analysisResult.priceData.current_price
+                  ).macd_signal,
+                  bb: getTechnicalSignals(
+                    analysisResult.technical_analysis,
+                    analysisResult.priceData.current_price
+                  ).bb_signal
+                }}
+              />
+            )}
+          </div>
+        </>
       )}
     </div>
   );
 }; 
+

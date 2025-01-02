@@ -1,3 +1,5 @@
+import { TechnicalAnalysis } from './analysis';
+
 export interface AnalysisParams {
   contractAddress: string;
   timeframe: string;
@@ -13,23 +15,7 @@ export interface AnalysisResult {
       price: number;
     }>;
   };
-  technical_analysis: {
-    trend_analysis: {
-      primary_trend: string;
-      strength: number;
-    };
-    dca_recommendations: {
-      entry_zones: Array<{
-        price_level: number;
-        confidence: number;
-        allocation: number;
-      }>;
-      risk_assessment: {
-        overall_risk: number;
-        key_risks: string[];
-      };
-    };
-  };
+  technical_analysis: TechnicalAnalysis;
 }
 
 export type { SentimentAnalysis, SentimentAnalysisParams } from './sentiment'; 
