@@ -70,23 +70,30 @@ class TelegramAnalyzer:
                 start_date = end_date - timedelta(days=days)
                 
                 messages = await self._fetch_messages(channel_entity, start_date, end_date)
-                
                 total_members = full_channel.full_chat.participants_count
                 
-                # Basic mode just counts unique senders
-                if not advanced_mode:
-                    active_members = len(set(m['sender_id'] for m in messages if m['sender_id'] is not None))
-                    messages_per_day = len(messages) / days if days > 0 else 0
-                else:
-                    # Advanced mode includes full participant analysis
-                    active_members = await self._get_active_members(channel_entity, start_date)
-                    messages_per_day = (len(messages) / days / active_members) if days > 0 and active_members > 0 else 0
+                active_members = len(set(m['sender_id'] for m in messages if m['sender_id'] is not None))
+                messages_per_day = len(messages) / days if days > 0 else 0
+                messages_per_day_per_user = messages_per_day / active_members if active_members > 0 else 0
                 
-                result = await self._analyze_messages(messages, total_members, active_members, messages_per_day)
+                # Basic analysis
+                result = {
+                    'channel_stats': {
+                        'total_members': total_members,
+                        'active_members': active_members,
+                        'messages_per_day': messages_per_day_per_user
+                    },
+                    'engagement_metrics': self._analyze_engagement(messages),
+                    'sentiment_metrics': self._analyze_sentiment(messages),
+                    'topic_analysis': self._analyze_topics(messages)
+                }
                 
+                # Add advanced metrics if requested
                 if advanced_mode:
-                    advanced_metrics = await self._analyze_advanced_metrics(channel_entity, messages, start_date)
-                    result['advanced_metrics'] = advanced_metrics
+                    print("[Telegram] 📊 Calculating advanced metrics...")
+                    result['advanced_metrics'] = await self._analyze_advanced_metrics(messages)
+                    print("[Telegram] ✅ Advanced metrics complete")
+                    print(f"[Telegram] Advanced metrics data: {result['advanced_metrics']}")  # Debug log
                 
                 return result
                 
@@ -94,60 +101,114 @@ class TelegramAnalyzer:
             print(f"[Telegram] ❌ Error during analysis: {str(e)}")
             raise
 
-    async def _analyze_advanced_metrics(self, channel_entity, messages: list, start_date: datetime) -> dict:
+    async def _analyze_advanced_metrics(self, messages: list) -> dict:
         print("[Telegram] 📊 Calculating advanced metrics...")
         
-        # Analyze user activity
         user_stats = defaultdict(lambda: {'message_count': 0, 'reaction_count': 0})
+        reaction_counter = Counter()
+        daily_active = defaultdict(set)
+        weekly_active = defaultdict(set)
+        monthly_active = defaultdict(set)
+        
+        now = datetime.now(pytz.UTC)
+        
         for msg in messages:
             if msg['sender_id']:
                 user_stats[msg['sender_id']]['message_count'] += 1
-                # Count reactions if available
-                if hasattr(msg, 'reactions') and msg['reactions']:
-                    user_stats[msg['sender_id']]['reaction_count'] += len(msg['reactions'])
+                if msg['reactions']:
+                    # Extract just the emoji from the ReactionEmoji object
+                    reactions = msg['reactions'].results
+                    reaction_emojis = [r.reaction.emoticon for r in reactions]  # Get just the emoticon
+                    reaction_counter.update(reaction_emojis)
+                    user_stats[msg['sender_id']]['reaction_count'] += len(reactions)
+                
+                msg_date = msg['date']
+                if msg_date > now - timedelta(days=1):
+                    daily_active[msg_date.date()].add(msg['sender_id'])
+                if msg_date > now - timedelta(days=7):
+                    weekly_active[msg_date.date()].add(msg['sender_id'])
+                if msg_date > now - timedelta(days=30):
+                    monthly_active[msg_date.date()].add(msg['sender_id'])
         
-        # Calculate engagement scores and sort users
+        # Calculate top users by engagement score
         top_users = []
         for user_id, stats in user_stats.items():
-            engagement_score = stats['message_count'] + (stats['reaction_count'] * 0.5)
+            engagement_score = (stats['message_count'] * 1.0 + stats['reaction_count'] * 0.5)
             top_users.append({
                 'user_id': str(user_id),
                 'message_count': stats['message_count'],
                 'reaction_count': stats['reaction_count'],
-                'engagement_score': engagement_score
+                'engagement_score': round(engagement_score, 2)
             })
         
+        # Sort users by engagement score
         top_users.sort(key=lambda x: x['engagement_score'], reverse=True)
         
-        # Get reaction statistics
-        reaction_counter = Counter()
-        total_reactions = 0
-        for msg in messages:
-            if hasattr(msg, 'reactions') and msg['reactions']:
-                for reaction in msg['reactions']:
-                    reaction_counter[reaction] += 1
-                    total_reactions += 1
-        
+        # Calculate reaction statistics with cleaner format
+        total_reactions = sum(reaction_counter.values())
         reaction_stats = [
             {
-                'reaction': reaction,
+                'reaction': emoji,  # Now this will be just the emoji character
                 'count': count,
-                'percentage': (count / total_reactions * 100) if total_reactions > 0 else 0
+                'percentage': round((count / total_reactions * 100), 1) if total_reactions > 0 else 0
             }
-            for reaction, count in reaction_counter.most_common(10)
+            for emoji, count in reaction_counter.most_common()
         ]
         
-        print("[Telegram] ✅ Advanced metrics calculation complete")
+        # Add sentiment trend analysis
+        sentiment_by_day = defaultdict(list)
+        for msg in messages:
+            try:
+                blob = TextBlob(msg['text'])
+                date_key = msg['date'].date()
+                sentiment_by_day[date_key].append(blob.sentiment.polarity)
+            except Exception as e:
+                print(f"[Telegram] ⚠️ Error analyzing sentiment: {str(e)}")
+                continue
+        
+        # Calculate daily net sentiment scores
+        sentiment_trend = []
+        for date, scores in sorted(sentiment_by_day.items()):
+            positive = sum(1 for s in scores if s > 0.1)
+            negative = sum(1 for s in scores if s < -0.1)
+            neutral = sum(1 for s in scores if -0.1 <= s <= 0.1)
+            total = len(scores)
+            
+            if total > 0:
+                net_score = (positive - negative) / total
+            else:
+                net_score = 0
+            
+            sentiment_trend.append({
+                'date': date.isoformat(),
+                'net_score': round(net_score, 3),
+                'total_messages': total
+            })
         
         return {
-            'top_users': top_users[:10],  # Limit to top 10 users
+            'top_users': top_users[:10],
             'reaction_stats': reaction_stats,
             'activity_patterns': {
-                'daily_active_users': len(set(m['sender_id'] for m in messages if m['date'] > datetime.now(pytz.UTC) - timedelta(days=1))),
-                'weekly_active_users': len(set(m['sender_id'] for m in messages if m['date'] > datetime.now(pytz.UTC) - timedelta(days=7))),
-                'monthly_active_users': len(set(m['sender_id'] for m in messages if m['date'] > datetime.now(pytz.UTC) - timedelta(days=30)))
-            }
+                'daily_active_users': len(set().union(*daily_active.values())) if daily_active else 0,
+                'weekly_active_users': len(set().union(*weekly_active.values())) if weekly_active else 0,
+                'monthly_active_users': len(set().union(*monthly_active.values())) if monthly_active else 0
+            },
+            'sentiment_trend': sentiment_trend
         }
+
+    def _get_peak_activity_days(self, messages: list) -> list:
+        day_counts = defaultdict(int)
+        for msg in messages:
+            day_counts[msg['date'].strftime('%A')] += 1
+        
+        return [
+            {'day': day, 'message_count': count}
+            for day, count in sorted(
+                day_counts.items(), 
+                key=lambda x: x[1], 
+                reverse=True
+            )
+        ]
 
     def _calculate_growth_rate(self, participants, days: int) -> float:
         total_members = participants.count
@@ -161,10 +222,20 @@ class TelegramAnalyzer:
         return (inactive_members / total_members * 100) if total_members > 0 else 0
 
     async def _analyze_messages(self, messages: list, total_members: int, active_members: int, messages_per_day: float) -> dict:
+        # Get sentiment metrics
         sentiment_results = self._analyze_sentiment(messages)
+        
+        # Get engagement metrics with peak hours
         engagement_results = self._analyze_engagement(messages)
+        
+        # Get topic analysis with frequency and trends
         topic_results = self._analyze_topics(messages)
+        
+        # Calculate peak activity patterns
         peak_hours = self._analyze_peak_hours(messages)
+        
+        # Calculate hourly and daily activity patterns
+        activity_patterns = self._analyze_activity_patterns(messages)
         
         return {
             'channel_stats': {
@@ -174,10 +245,65 @@ class TelegramAnalyzer:
             },
             'engagement_metrics': {
                 **engagement_results,
-                'peak_hours': peak_hours
+                'peak_hours': peak_hours,
+                'activity_patterns': activity_patterns
             },
             'sentiment_metrics': sentiment_results,
             'topic_analysis': topic_results
+        }
+
+    def _analyze_activity_patterns(self, messages: list) -> dict:
+        if not messages:
+            return {
+                'hourly_distribution': [],
+                'daily_distribution': [],
+                'peak_periods': {
+                    'hours': [],
+                    'days': []
+                }
+            }
+        
+        # Analyze hourly patterns
+        hour_counts = defaultdict(int)
+        day_counts = defaultdict(int)
+        
+        for msg in messages:
+            hour_counts[msg['date'].hour] += 1
+            day_counts[msg['date'].strftime('%A')] += 1  # Get day name
+        
+        total_messages = len(messages)
+        
+        # Get hourly distribution
+        hourly_distribution = [
+            {
+                'hour': hour,
+                'message_count': count,
+                'percentage': (count / total_messages * 100) if total_messages > 0 else 0
+            }
+            for hour, count in sorted(hour_counts.items())
+        ]
+        
+        # Get daily distribution
+        daily_distribution = [
+            {
+                'day': day,
+                'message_count': count,
+                'percentage': (count / total_messages * 100) if total_messages > 0 else 0
+            }
+            for day, count in sorted(day_counts.items())
+        ]
+        
+        # Identify peak periods
+        peak_hours = sorted(hour_counts.items(), key=lambda x: x[1], reverse=True)[:5]
+        peak_days = sorted(day_counts.items(), key=lambda x: x[1], reverse=True)
+        
+        return {
+            'hourly_distribution': hourly_distribution,
+            'daily_distribution': daily_distribution,
+            'peak_periods': {
+                'hours': [{'hour': h, 'count': c} for h, c in peak_hours],
+                'days': [{'day': d, 'count': c} for d, c in peak_days]
+            }
         }
 
     def _analyze_peak_hours(self, messages: list) -> list:
@@ -275,14 +401,23 @@ class TelegramAnalyzer:
                 'sentiment_trend': []
             }
             
-        # Calculate overall sentiment
-        sentiments = [TextBlob(msg['text']).sentiment.polarity for msg in messages]
+        # Calculate overall sentiment using TextBlob
+        sentiments = []
+        for msg in messages:
+            try:
+                blob = TextBlob(msg['text'])
+                sentiments.append(blob.sentiment.polarity)
+            except Exception as e:
+                print(f"[Telegram] ⚠️ Error analyzing sentiment: {str(e)}")
+                continue
+        
+        # Classify messages
         positive = sum(1 for s in sentiments if s > 0.1)
         negative = sum(1 for s in sentiments if s < -0.1)
         neutral = sum(1 for s in sentiments if -0.1 <= s <= 0.1)
         total = len(sentiments)
         
-        # Calculate sentiment trend by day
+        # Calculate daily sentiment trend
         sentiment_by_day = defaultdict(list)
         for msg, sentiment in zip(messages, sentiments):
             date_key = msg['date'].date()
@@ -295,11 +430,11 @@ class TelegramAnalyzer:
             }
             for date, scores in sorted(sentiment_by_day.items())
         ]
-
+        
         return {
-            'positive_percentage': (positive / total) * 100 if total > 0 else 0,
-            'negative_percentage': (negative / total) * 100 if total > 0 else 0,
-            'neutral_percentage': (neutral / total) * 100 if total > 0 else 0,
+            'positive_percentage': (positive / total * 100) if total > 0 else 0,
+            'negative_percentage': (negative / total * 100) if total > 0 else 0,
+            'neutral_percentage': (neutral / total * 100) if total > 0 else 0,
             'net_sentiment_score': sum(sentiments) / len(sentiments) if sentiments else 0,
             'sentiment_trend': sentiment_trend
         }
@@ -313,19 +448,25 @@ class TelegramAnalyzer:
                 'peak_hours': []
             }
             
-        unique_users = len(set(m['sender_id'] for m in messages))
-        avg_length = sum(len(m['text']) for m in messages) / len(messages)
+        # Count messages per unique user
+        user_message_counts = defaultdict(int)
+        for msg in messages:
+            if msg['sender_id'] is not None:
+                user_message_counts[msg['sender_id']] += 1
         
-        hours = [m['date'].hour for m in messages]
-        hour_counts = Counter(hours)
-        peak_hours = sorted(hour_counts.items(), key=lambda x: x[1], reverse=True)[:5]
+        active_users = len(user_message_counts)
+        total_messages = len(messages)
+        
+        # Average messages per active user
+        messages_per_user = total_messages / active_users if active_users > 0 else 0
+        avg_length = sum(len(m['text']) for m in messages) / total_messages if total_messages > 0 else 0
         
         return {
-            'messages_per_user': len(messages) / unique_users if unique_users > 0 else 0,
+            'messages_per_user': messages_per_user,
             'avg_message_length': avg_length,
-            'engagement_rate': sum(m['views'] or 0 for m in messages) / len(messages),
-            'peak_hours': [hour for hour, _ in peak_hours]
-        } 
+            'engagement_rate': sum(m['views'] or 0 for m in messages) / total_messages if total_messages > 0 else 0,
+            'peak_hours': self._analyze_peak_hours(messages)
+        }
 
     async def _get_active_members(self, channel_entity, start_date: datetime) -> int:
         try:

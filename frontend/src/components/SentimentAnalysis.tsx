@@ -101,6 +101,42 @@ export const SentimentAnalysis: React.FC<Props> = ({ data, loading }) => {
           <AdvancedMetrics advancedMetrics={data.advanced_metrics} />
         </div>
       )}
+
+      {/* Advanced Metrics - Sentiment Trend */}
+      {data.advanced_metrics && (
+        <div className="bg-white rounded-lg p-4 shadow">
+          <h3 className="text-xl font-semibold mb-4">Sentiment Trend Over Time</h3>
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={data.advanced_metrics.sentiment_trend}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis 
+                  dataKey="date" 
+                  tickFormatter={(date) => new Date(date).toLocaleDateString()}
+                />
+                <YAxis 
+                  domain={[-1, 1]}
+                  tickFormatter={(value) => value.toFixed(2)}
+                />
+                <Tooltip 
+                  formatter={(value: number) => [
+                    value.toFixed(3),
+                    "Net Sentiment Score"
+                  ]}
+                  labelFormatter={(date) => new Date(date).toLocaleDateString()}
+                />
+                <Line 
+                  type="monotone" 
+                  dataKey="net_score" 
+                  stroke="#3b82f6" 
+                  dot={false}
+                  name="Net Sentiment"
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
     </div>
   );
 }; 

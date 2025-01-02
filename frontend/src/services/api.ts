@@ -44,7 +44,8 @@ export const analyzeSentiment = async (params: SentimentAnalysisParams): Promise
   try {
     const requestData = {
       telegram_channel: params.telegram_channel,
-      interval_days: params.interval_days
+      interval_days: params.interval_days,
+      advanced_analysis: params.advanced_analysis
     };
 
     console.log('API Request:', requestData);

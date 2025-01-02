@@ -59,6 +59,11 @@ export interface SentimentAnalysis {
         message_count: number;
       }>;
     };
+    sentiment_trend: Array<{
+      date: string;
+      net_score: number;
+      total_messages: number;
+    }>;
   };
 }
 

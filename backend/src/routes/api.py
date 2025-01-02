@@ -5,6 +5,7 @@ from ..services.price import PriceService
 from ..services.dca import DCAStrategyFacade
 from ..services.sentiment import SentimentAnalyzer
 from ..models.requests import TokenAnalysisRequest, SentimentAnalysisRequest
+from pydantic import BaseModel
 
 router = APIRouter()
 price_service = PriceService()
@@ -87,12 +88,18 @@ async def analyze_token(request: TokenAnalysisRequest):
             detail=f"Analysis failed: {str(e)}"
         )
 
+class SentimentAnalysisRequest(BaseModel):
+    telegram_channel: str
+    interval_days: int
+    advanced_analysis: bool = False
+
 @router.post("/api/analyze-sentiment")
 async def analyze_sentiment(request: SentimentAnalysisRequest):
     try:
         sentiment_result = await sentiment_analyzer.analyze_channel(
             channel=request.telegram_channel,
-            days=request.interval_days
+            days=request.interval_days,
+            advanced_mode=request.advanced_analysis
         )
         
         return sentiment_result

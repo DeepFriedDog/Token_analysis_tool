@@ -14,14 +14,17 @@ class SentimentAnalyzer:
             api_hash=os.getenv('TELEGRAM_API_HASH')
         )
 
-    async def analyze_channel(self, channel: str, days: int) -> Dict:
+    async def analyze_channel(self, channel: str, days: int, advanced_mode: bool = False) -> Dict:
         """Analyze sentiment for a Telegram channel"""
         try:
             print(f"[Sentiment] 📊 Analyzing channel {channel} for past {days} days...")
+            print(f"[Sentiment] 📊 Advanced mode: {advanced_mode}")
+            
             if not self.telegram.client.is_connected():
                 print("[Sentiment] 🔄 Reconnecting Telegram client...")
                 await self.telegram.ensure_initialized()
-            result = await self.telegram.analyze_channel(channel, days)
+            
+            result = await self.telegram.analyze_channel(channel, days, advanced_mode)
             print("[Sentiment] ✅ Analysis complete")
             return result
         except Exception as e:
