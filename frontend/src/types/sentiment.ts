@@ -1,69 +1,62 @@
+interface SentimentMetrics {
+  positive_percentage: number;
+  neutral_percentage: number;
+  negative_percentage: number;
+  net_sentiment_score: number;
+  sentiment_trend: Array<{
+    date: string;
+    net_score: number;
+  }>;
+}
+
 export interface SentimentAnalysis {
   channel_stats: {
     total_members: number;
     active_members: number;
     messages_per_day: number;
   };
-  engagement_metrics: {
-    messages_per_user: number;
-    avg_message_length: number;
-    engagement_rate: number;
-    peak_hours: Array<{
-      hour: number;
-      message_count: number;
-      percentage: number;
-    }>;
-  };
-  sentiment_metrics: {
-    positive_percentage: number;
-    negative_percentage: number;
-    neutral_percentage: number;
-    net_sentiment_score: number;
-    sentiment_trend: Array<{
-      date: string;
-      score: number;
-    }>;
-  };
+  sentiment_metrics: SentimentMetrics;
   topic_analysis: {
     top_topics: Array<{
       topic: string;
       frequency: number;
-      sentiment_score: number;
-    }>;
-    topic_trends: Array<{
-      date: string;
-      topics: Array<{
-        topic: string;
-        count: number;
-      }>;
     }>;
   };
-  advanced_metrics?: {
-    top_users: Array<{
-      user_id: string;
-      message_count: number;
-      reaction_count: number;
-      engagement_score: number;
-    }>;
-    reaction_stats: Array<{
-      reaction: string;
-      count: number;
-      percentage: number;
-    }>;
-    activity_patterns: {
-      daily_active_users: number;
-      weekly_active_users: number;
-      monthly_active_users: number;
-      peak_activity_days: Array<{
-        day: string;
-        message_count: number;
-      }>;
-    };
-    sentiment_trend: Array<{
+  activity_patterns: {
+    daily_metrics: Array<{
       date: string;
-      net_score: number;
-      total_messages: number;
+      active_users: number;
+      message_count: number;
     }>;
+    retention: {
+      consistent_users: number;
+      occasional_users: number;
+      one_time_users: number;
+    };
+    activity_consistency: {
+      average_gap_hours: number;
+      max_gap_hours: number;
+      activity_score: number;
+    };
+  };
+  advanced_metrics: {
+    discussion_depth: {
+      technical_term_frequency: Record<string, number>;
+      detailed_messages_count: number;
+      reference_links_count: number;
+      avg_message_complexity: number;
+    };
+    pump_indicators: {
+      hype_level: number;
+      duplicate_message_ratio: number;
+      suspicious_user_ratio: number;
+      coordinated_spikes: number;
+    };
+    quality_indicators: {
+      technical_discussion_ratio: number;
+      quality_contributor_ratio: number;
+      avg_message_quality: number;
+    };
   };
 }
 

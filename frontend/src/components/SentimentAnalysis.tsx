@@ -6,6 +6,7 @@ import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, 
   CartesianGrid, Tooltip, ResponsiveContainer
 } from 'recharts';
+import { SentimentMetrics } from './SentimentMetrics';
 
 interface Props {
   data: SentimentData;
@@ -94,47 +95,40 @@ export const SentimentAnalysis: React.FC<Props> = ({ data, loading }) => {
         </div>
       </div>
 
-      {/* Advanced Metrics (conditionally rendered) */}
+      {/* Advanced Metrics Section */}
       {data.advanced_metrics && (
         <div>
           <h2 className="text-2xl font-bold mb-4">Advanced Community Insights</h2>
-          <AdvancedMetrics advancedMetrics={data.advanced_metrics} />
-        </div>
-      )}
-
-      {/* Advanced Metrics - Sentiment Trend */}
-      {data.advanced_metrics && (
-        <div className="bg-white rounded-lg p-4 shadow">
-          <h3 className="text-xl font-semibold mb-4">Sentiment Trend Over Time</h3>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={data.advanced_metrics.sentiment_trend}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis 
-                  dataKey="date" 
-                  tickFormatter={(date) => new Date(date).toLocaleDateString()}
-                />
-                <YAxis 
-                  domain={[-1, 1]}
-                  tickFormatter={(value) => value.toFixed(2)}
-                />
-                <Tooltip 
-                  formatter={(value: number) => [
-                    value.toFixed(3),
-                    "Net Sentiment Score"
-                  ]}
-                  labelFormatter={(date) => new Date(date).toLocaleDateString()}
-                />
-                <Line 
-                  type="monotone" 
-                  dataKey="net_score" 
-                  stroke="#3b82f6" 
-                  dot={false}
-                  name="Net Sentiment"
-                />
-              </LineChart>
-            </ResponsiveContainer>
+          <div style={{ display: 'none' }}>
+            {JSON.stringify(data.sentiment_metrics, null, 2)}
           </div>
+          <SentimentMetrics 
+            discussionDepth={{
+              technical_term_frequency: data.advanced_metrics.discussion_depth.technical_term_frequency,
+              detailed_messages_count: data.advanced_metrics.discussion_depth.detailed_messages_count,
+              reference_links_count: data.advanced_metrics.discussion_depth.reference_links_count,
+              avg_message_complexity: data.advanced_metrics.discussion_depth.avg_message_complexity,
+              pump_indicators: data.advanced_metrics.pump_indicators,
+              quality_indicators: data.advanced_metrics.quality_indicators
+            }}
+            activityPatterns={{
+              daily_metrics: data.activity_patterns?.daily_metrics || [],
+              retention: data.activity_patterns?.retention || {
+                consistent_users: 0,
+                occasional_users: 0,
+                one_time_users: 0
+              },
+              activity_consistency: data.activity_patterns?.activity_consistency || {
+                average_gap_hours: 0,
+                max_gap_hours: 0,
+                activity_score: 0
+              }
+            }}
+            sentimentTrends={{
+              sentiment_trend: data.sentiment_metrics?.sentiment_trend || [],
+              overall_sentiment: data.sentiment_metrics?.net_sentiment_score || 0
+            }}
+          />
         </div>
       )}
     </div>

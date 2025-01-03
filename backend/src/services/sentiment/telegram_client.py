@@ -8,6 +8,8 @@ from textblob import TextBlob
 import nltk
 from collections import Counter, defaultdict
 import pytz
+import hashlib
+import statistics
 
 class TelegramAnalyzer:
     def __init__(self, api_id: str, api_hash: str):
@@ -102,99 +104,114 @@ class TelegramAnalyzer:
             raise
 
     async def _analyze_advanced_metrics(self, messages: list) -> dict:
-        print("[Telegram] 📊 Calculating advanced metrics...")
-        
-        user_stats = defaultdict(lambda: {'message_count': 0, 'reaction_count': 0})
-        reaction_counter = Counter()
-        daily_active = defaultdict(set)
-        weekly_active = defaultdict(set)
-        monthly_active = defaultdict(set)
-        
-        now = datetime.now(pytz.UTC)
-        
-        for msg in messages:
-            if msg['sender_id']:
-                user_stats[msg['sender_id']]['message_count'] += 1
-                if msg['reactions']:
-                    # Extract just the emoji from the ReactionEmoji object
-                    reactions = msg['reactions'].results
-                    reaction_emojis = [r.reaction.emoticon for r in reactions]  # Get just the emoticon
-                    reaction_counter.update(reaction_emojis)
-                    user_stats[msg['sender_id']]['reaction_count'] += len(reactions)
-                
-                msg_date = msg['date']
-                if msg_date > now - timedelta(days=1):
-                    daily_active[msg_date.date()].add(msg['sender_id'])
-                if msg_date > now - timedelta(days=7):
-                    weekly_active[msg_date.date()].add(msg['sender_id'])
-                if msg_date > now - timedelta(days=30):
-                    monthly_active[msg_date.date()].add(msg['sender_id'])
-        
-        # Calculate top users by engagement score
-        top_users = []
-        for user_id, stats in user_stats.items():
-            engagement_score = (stats['message_count'] * 1.0 + stats['reaction_count'] * 0.5)
-            top_users.append({
-                'user_id': str(user_id),
-                'message_count': stats['message_count'],
-                'reaction_count': stats['reaction_count'],
-                'engagement_score': round(engagement_score, 2)
-            })
-        
-        # Sort users by engagement score
-        top_users.sort(key=lambda x: x['engagement_score'], reverse=True)
-        
-        # Calculate reaction statistics with cleaner format
-        total_reactions = sum(reaction_counter.values())
-        reaction_stats = [
-            {
-                'reaction': emoji,  # Now this will be just the emoji character
-                'count': count,
-                'percentage': round((count / total_reactions * 100), 1) if total_reactions > 0 else 0
+        """Analyze advanced metrics including discussion quality and manipulation indicators"""
+        try:
+            # Initialize counters
+            technical_terms = defaultdict(int)
+            detailed_messages = 0
+            reference_links = 0
+            total_words = 0
+            duplicate_messages = defaultdict(int)
+            user_message_counts = defaultdict(int)
+            
+            # Technical terms to track
+            tech_categories = {
+                'defi': ['liquidity', 'yield', 'stake', 'farm', 'pool', 'swap'],
+                'security': ['audit', 'multisig', 'timelock', 'vulnerability', 'exploit'],
+                'development': ['github', 'code', 'smart contract', 'implementation', 'deploy'],
+                'governance': ['proposal', 'vote', 'dao', 'governance', 'quorum']
             }
-            for emoji, count in reaction_counter.most_common()
-        ]
-        
-        # Add sentiment trend analysis
-        sentiment_by_day = defaultdict(list)
+            
+            # Analyze each message
+            for msg in messages:
+                text = msg['text'].lower()
+                words = text.split()
+                total_words += len(words)
+                
+                # Track technical terms
+                for category, terms in tech_categories.items():
+                    if any(term in text for term in terms):
+                        technical_terms[category] += 1
+                
+                # Track detailed messages
+                if len(words) > 50:
+                    detailed_messages += 1
+                
+                # Track reference links
+                if any(domain in text for domain in ['github.com', 'docs.', 'gitbook.']):
+                    reference_links += 1
+                
+                # Track duplicate messages for spam detection
+                msg_hash = hashlib.md5(text.encode()).hexdigest()
+                duplicate_messages[msg_hash] += 1
+                
+                # Track user message frequency
+                user_message_counts[msg['sender_id']] += 1
+            
+            # Calculate metrics
+            total_messages = len(messages)
+            unique_users = len(user_message_counts)
+            
+            # Discussion depth metrics
+            discussion_depth = {
+                'technical_term_frequency': dict(technical_terms),
+                'detailed_messages_count': detailed_messages,
+                'reference_links_count': reference_links,
+                'avg_message_complexity': total_words / total_messages if total_messages > 0 else 0
+            }
+            
+            # Calculate pump indicators
+            duplicate_ratio = sum(1 for count in duplicate_messages.values() if count > 1) / total_messages if total_messages > 0 else 0
+            suspicious_users = sum(1 for count in user_message_counts.values() if count > 50) / unique_users if unique_users > 0 else 0
+            
+            pump_indicators = {
+                'hype_level': self._calculate_hype_level(messages),
+                'duplicate_message_ratio': duplicate_ratio,
+                'suspicious_user_ratio': suspicious_users,
+                'coordinated_spikes': self._detect_activity_spikes(messages)
+            }
+            
+            # Calculate quality indicators
+            quality_indicators = {
+                'technical_discussion_ratio': sum(technical_terms.values()) / total_messages if total_messages > 0 else 0,
+                'quality_contributor_ratio': sum(1 for count in user_message_counts.values() if count > 5) / unique_users if unique_users > 0 else 0,
+                'avg_message_quality': (detailed_messages + reference_links) / total_messages if total_messages > 0 else 0
+            }
+            
+            return {
+                'discussion_depth': discussion_depth,
+                'pump_indicators': pump_indicators,
+                'quality_indicators': quality_indicators
+            }
+            
+        except Exception as e:
+            print(f"[Telegram] ❌ Error analyzing advanced metrics: {str(e)}")
+            raise
+
+    def _calculate_hype_level(self, messages: list) -> float:
+        """Calculate hype level based on message patterns"""
+        hype_words = ['moon', 'pump', 'buy', 'fomo', 'rocket', '🚀', '🌙', '💎']
+        hype_count = sum(1 for msg in messages if any(word in msg['text'].lower() for word in hype_words))
+        return hype_count / len(messages) if messages else 0
+
+    def _detect_activity_spikes(self, messages: list) -> int:
+        """Detect unusual spikes in message activity"""
+        if not messages:
+            return 0
+            
+        # Group messages by hour
+        hour_counts = defaultdict(int)
         for msg in messages:
-            try:
-                blob = TextBlob(msg['text'])
-                date_key = msg['date'].date()
-                sentiment_by_day[date_key].append(blob.sentiment.polarity)
-            except Exception as e:
-                print(f"[Telegram] ⚠️ Error analyzing sentiment: {str(e)}")
-                continue
-        
-        # Calculate daily net sentiment scores
-        sentiment_trend = []
-        for date, scores in sorted(sentiment_by_day.items()):
-            positive = sum(1 for s in scores if s > 0.1)
-            negative = sum(1 for s in scores if s < -0.1)
-            neutral = sum(1 for s in scores if -0.1 <= s <= 0.1)
-            total = len(scores)
+            hour_key = msg['date'].replace(minute=0, second=0, microsecond=0)
+            hour_counts[hour_key] += 1
             
-            if total > 0:
-                net_score = (positive - negative) / total
-            else:
-                net_score = 0
-            
-            sentiment_trend.append({
-                'date': date.isoformat(),
-                'net_score': round(net_score, 3),
-                'total_messages': total
-            })
+        # Calculate mean and standard deviation
+        counts = list(hour_counts.values())
+        mean = statistics.mean(counts)
+        stdev = statistics.stdev(counts) if len(counts) > 1 else 0
         
-        return {
-            'top_users': top_users[:10],
-            'reaction_stats': reaction_stats,
-            'activity_patterns': {
-                'daily_active_users': len(set().union(*daily_active.values())) if daily_active else 0,
-                'weekly_active_users': len(set().union(*weekly_active.values())) if weekly_active else 0,
-                'monthly_active_users': len(set().union(*monthly_active.values())) if monthly_active else 0
-            },
-            'sentiment_trend': sentiment_trend
-        }
+        # Count hours with activity > 2 standard deviations above mean
+        return sum(1 for count in counts if count > mean + (2 * stdev))
 
     def _get_peak_activity_days(self, messages: list) -> list:
         day_counts = defaultdict(int)
@@ -426,7 +443,7 @@ class TelegramAnalyzer:
         sentiment_trend = [
             {
                 'date': date.isoformat(),
-                'score': sum(scores) / len(scores) if scores else 0
+                'net_score': sum(scores) / len(scores) if scores else 0
             }
             for date, scores in sorted(sentiment_by_day.items())
         ]
