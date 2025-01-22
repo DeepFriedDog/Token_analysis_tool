@@ -1,10 +1,11 @@
-from datetime import datetime
+from typing import Dict, List, Optional
+from datetime import datetime, timedelta
+import aiohttp
 import pandas as pd
-from ..ethereum import EthereumService
 from .exceptions import PriceDataError
 from .processors.defillama import DefiLlamaProcessor
 from ..technical_analysis.analyzer import TechnicalAnalyzer
-from decimal import Decimal
+from decimal import Decimal, ROUND_DOWN, InvalidOperation
 
 class PriceService:
     def __init__(self):
@@ -12,49 +13,82 @@ class PriceService:
         pd.set_option('display.float_format', lambda x: f'{x:.8f}')
         pd.set_option('display.precision', 8)
 
-    async def fetch_price_data(self, contract_address: str, timeframe: str, interval_days: int) -> pd.DataFrame:
-        """Fetch price data from DefiLlama"""
+    async def get_price_data(self, contract_address: str, timeframe: str, interval_days: int) -> Dict:
+        """Fetch and process price data with preserved precision"""
         try:
-            print(f"\n[Price] 🔍 Analyzing {contract_address}")
+            print(f"[Price] 🔍 Analyzing {contract_address}")
             print(f"[Price] ⚙️ Parameters: {timeframe} intervals, {interval_days} days")
             
             df = await self.defillama_processor.fetch_data(contract_address, timeframe, interval_days)
             
             if df.empty:
-                raise PriceDataError(
-                    message="No price data available",
-                    source="data",
-                    status_code=404
-                )
-                
-            # Ensure we maintain precision for all numerical columns
-            for col in ['open', 'high', 'low', 'close']:
+                raise PriceDataError("No price data found", "defillama")
+            
+            print(f"[DefiLlama] ✅ Found {len(df)} price points with 8 decimals")
+            
+            # Convert price columns to Decimal with 8 decimal precision
+            for col in ['close', 'high', 'low']:
                 if col in df.columns:
-                    df[col] = df[col].astype('object')
+                    df[col] = df[col].apply(lambda x: Decimal(str(x)).quantize(Decimal('0.00000001'), rounding=ROUND_DOWN))
             
-            print(f"[Price] ✅ Successfully fetched {len(df)} price points")
-            return df
+            print("[Price] ✅ Successfully fetched price points")
             
-        except PriceDataError:
-            raise
+            # Format price data for frontend chart
+            price_history = []
+            for timestamp, row in df.iterrows():
+                # Convert timestamp to milliseconds for frontend chart
+                ts_ms = int(pd.Timestamp(timestamp).timestamp() * 1000)
+                price_point = {
+                    'timestamp': ts_ms,  # Frontend expects milliseconds timestamp
+                    'value': str(row['close']),  # Frontend expects string for precision
+                    'formatted': {
+                        'price': str(row['close']),  # Keep string version for precision
+                        'high': str(row.get('high', row['close'])),
+                        'low': str(row.get('low', row['close']))
+                    }
+                }
+                price_history.append(price_point)
+            
+            # Sort by timestamp to ensure proper chart rendering
+            price_history.sort(key=lambda x: x['timestamp'])
+            
+            # Calculate technical indicators
+            technical_analysis = self.calculate_technical_indicators(df)
+            
+            return {
+                'priceData': {
+                    'price_history': price_history,
+                    'current_price': str(df['close'].iloc[-1]) if not df.empty else "0"
+                },
+                'technical_analysis': technical_analysis
+            }
+            
         except Exception as e:
-            raise PriceDataError(
-                message=f"Error fetching price data: {str(e)}",
-                source="fetch",
-                status_code=500
-            )
+            print(f"[Price] ❌ Error: {str(e)}")
+            raise PriceDataError(f"Error fetching price data: {str(e)}", "price_service")
 
-    def calculate_technical_indicators(self, df: pd.DataFrame) -> dict:
+    def calculate_technical_indicators(self, df: pd.DataFrame) -> Dict:
         """Calculate technical indicators using TechnicalAnalyzer"""
         try:
             print("[Analysis] 📊 Calculating technical indicators...")
-            
             analyzer = TechnicalAnalyzer(df)
             result = analyzer.analyze()
-            
             print("[Analysis] ✅ Technical analysis complete")
             return result
             
+        except InvalidOperation as e:
+            print(f"[Analysis] ❌ Decimal conversion error: {str(e)}")
+            return {
+                'support_levels': [],
+                'resistance_levels': [],
+                'rsi': str(Decimal('50.0')),
+                'volatility': str(Decimal('0.0')),
+                'fibonacci_levels': [],
+                'advanced_indicators': {
+                    'macd': {'line': '0', 'signal': '0', 'histogram': '0'},
+                    'bollinger_bands': {'upper': '0', 'middle': '0', 'lower': '0'}
+                }
+            }
         except Exception as e:
             print(f"[Analysis] ❌ Error calculating indicators: {str(e)}")
             raise PriceDataError(

@@ -2,15 +2,14 @@ from typing import List, Dict
 import numpy as np
 import pandas as pd
 from decimal import Decimal
-import talib
 
 class BaseTechnicalAnalysis:
-    def __init__(self, price_data: pd.DataFrame):
+    def __init__(self, df: pd.DataFrame):
         """
         Initialize with price data DataFrame containing columns:
         timestamp, open, high, low, close, volume
         """
-        self.df = price_data.copy()
+        self.df = df
         if not isinstance(self.df.index, pd.DatetimeIndex):
             if 'timestamp' in self.df.columns:
                 self.df.set_index('timestamp', inplace=True)
@@ -19,8 +18,8 @@ class BaseTechnicalAnalysis:
 
         # Convert price columns to numpy arrays for TA-Lib
         self.close_prices = self.df['close'].astype(float).values
-        self.high_prices = self.df['high'].astype(float).values
-        self.low_prices = self.df['low'].astype(float).values
+        self.high_prices = self.df['high'].astype(float).values if 'high' in self.df else self.close_prices
+        self.low_prices = self.df['low'].astype(float).values if 'low' in self.df else self.close_prices
 
     def prepare_data(self) -> None:
         """Prepare data for analysis"""
@@ -28,33 +27,36 @@ class BaseTechnicalAnalysis:
         self.df['volatility'] = self.df['returns'].rolling(window=20).std() 
 
     def calculate_advanced_indicators(self) -> Dict:
-        """Calculate advanced technical indicators"""
-        # Trend Indicators
-        sma_20 = talib.SMA(self.close_prices, timeperiod=20)
-        sma_50 = talib.SMA(self.close_prices, timeperiod=50)
-        ema_20 = talib.EMA(self.close_prices, timeperiod=20)
+        """Calculate advanced technical indicators using pandas implementations"""
+        df = pd.DataFrame({'close': self.close_prices})
         
-        # Momentum Indicators
-        rsi = talib.RSI(self.close_prices, timeperiod=14)
-        macd, macd_signal, macd_hist = talib.MACD(self.close_prices)
+        # Calculate indicators using the same methods as AdvancedDCACalculator
+        # Reference: backend/src/services/dca/advanced_calculator.py lines 89-128
+        close_prices = pd.Series(self.close_prices)
         
-        # Volatility Indicators
-        bbands_upper, bbands_middle, bbands_lower = talib.BBANDS(
-            self.close_prices, 
-            timeperiod=20,
-            nbdevup=2,
-            nbdevdn=2
-        )
+        # RSI calculation
+        delta = close_prices.diff()
+        gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+        loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+        rs = gain / loss
+        rsi = 100 - (100 / (1 + rs))
         
-        # Volume Profile
-        typical_price = (self.high_prices + self.low_prices + self.close_prices) / 3
-        money_flow_index = talib.MFI(
-            self.high_prices,
-            self.low_prices,
-            self.close_prices,
-            self.df['volume'].astype(float).values,
-            timeperiod=14
-        )
+        # Moving Averages
+        sma_20 = close_prices.rolling(window=20).mean()
+        sma_50 = close_prices.rolling(window=50).mean()
+        ema_20 = close_prices.ewm(span=20, adjust=False).mean()
+        
+        # MACD
+        exp1 = close_prices.ewm(span=12, adjust=False).mean()
+        exp2 = close_prices.ewm(span=26, adjust=False).mean()
+        macd = exp1 - exp2
+        macd_signal = macd.ewm(span=9, adjust=False).mean()
+        
+        # Bollinger Bands
+        bb_middle = close_prices.rolling(window=20).mean()
+        rolling_std = close_prices.rolling(window=20).std()
+        bb_upper = bb_middle + (rolling_std * 2)
+        bb_lower = bb_middle - (rolling_std * 2)
         
         return {
             'sma_20': sma_20,
@@ -64,9 +66,8 @@ class BaseTechnicalAnalysis:
             'macd': macd,
             'macd_signal': macd_signal,
             'bbands': {
-                'upper': bbands_upper,
-                'middle': bbands_middle,
-                'lower': bbands_lower
-            },
-            'mfi': money_flow_index
+                'upper': bb_upper,
+                'middle': bb_middle,
+                'lower': bb_lower
+            }
         }

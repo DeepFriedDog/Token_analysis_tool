@@ -124,7 +124,6 @@ A sophisticated DCA (Dollar-Cost Averaging) analysis tool for Ethereum tokens th
 - Python FastAPI
 - pandas for data analysis
 - numpy/scipy for technical calculations
-- Web3.py for Ethereum interaction
 
 ### Frontend Stack
 - Next.js/React
@@ -140,29 +139,12 @@ git clone https://github.com/yourusername/token-analysis-tool.git
 cd token-analysis-tool
 ```
 
-2. Install TA-Lib (required for technical analysis):
-
-Windows:
-- Download ta-lib-0.4.0-msvc.zip from https://ta-lib.org/hdr_dw.html
-- Extract to C:\ta-lib
-- Add C:\ta-lib\lib to your system's PATH environment variable
-- Alternative: Download pre-built wheel from https://www.lfd.uci.edu/~gohlke/pythonlibs/#ta-lib
-
-Linux:
-```bash
-wget http://prdownloads.sourceforge.net/ta-lib/ta-lib-0.4.0-src.tar.gz
-tar -xzf ta-lib-0.4.0-src.tar.gz
-cd ta-lib/
-./configure --prefix=/usr
-make
-sudo make install
-```
 
 3. Create and activate virtual environment:
 ```bash
 # Windows
-python -m venv venv
-.\venv\Scripts\activate
+
+
 
 # Linux/MacOS
 python -m venv venv
@@ -172,6 +154,7 @@ source venv/bin/activate
 4. Install backend dependencies
 ```bash
 cd backend
+.\venv_new\Scripts\activate
 pip install -r requirements.txt
 ```
 
@@ -184,6 +167,7 @@ npm install
 6. Start the backend server:
 ```bash
 cd backend
+.\venv_new\Scripts\activate
 uvicorn src.main:app --reload
 # Server will run on http://localhost:8000
 # API docs available at http://localhost:8000/docs
@@ -203,91 +187,9 @@ npm run dev
 #### Request Body
 ```json
 {
-  "contract_address": "string",    // Ethereum token contract address
+  "contract_address": "string",    // Token contract address (supports multiple chains)
   "timeframe": "string",          // "15m", "1h", "4h", "1d"
   "interval_days": integer,       // Analysis period (default: 30)
   "investment_amount": float      // Amount to invest (default: 100.0)
 }
 ```
-
-#### Response
-```json
-{
-  "token_info": {
-    "address": "string",
-    "name": "string",
-    "symbol": "string",
-    "decimals": integer,
-    "is_valid": boolean
-  },
-  "technical_analysis": {
-    "support_levels": [float],
-    "resistance_levels": [float],
-    "fibonacci_levels": [
-      {
-        "level": float,
-        "price": float,
-        "type": string
-      }
-    ],
-    "rsi": float,
-    "volatility": float
-  },
-  "dca_strategy": {
-    "entry_points": [
-      {
-        "price": float,
-        "percentage": float,
-        "timestamp": string
-      }
-    ],
-    "exit_points": [
-      {
-        "price": float,
-        "percentage": float,
-        "type": string
-      }
-    ],
-    "risk_score": float,
-    "expected_return": float,
-    "investment_distribution": [
-      {
-        "amount": float,
-        "timestamp": string,
-        "price_target": float
-      }
-    ]
-  },
-  "backtest_results": {
-    "historical_performance": float,
-    "win_rate": float,
-    "average_return": float,
-    "max_drawdown": float,
-    "risk_adjusted_return": float
-  }
-}
-```
-
-### Error Responses
-
-```json
-{
-  "error": "string",
-  "detail": "string",
-  "status_code": integer
-}
-```
-
-## Contributing
-
-Please read CONTRIBUTING.md for details on our code of conduct and the process for submitting pull requests.
-
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-Note: This project uses free public APIs for Ethereum RPC and price data. The endpoints are configured in `backend/src/config.py`.
-
-Public APIs used:
-- Ethereum RPC: Ankr, Cloudflare, Public RPC
-- Price Data: DefiLlama API

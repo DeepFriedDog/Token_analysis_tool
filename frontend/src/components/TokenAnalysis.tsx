@@ -48,7 +48,7 @@ export const TokenAnalysis: React.FC = () => {
       const result = await analyzeToken(analysisParams);
       console.log('Raw API Response:', result);
       
-      if (!Array.isArray(result?.priceData)) {
+      if (!result?.priceData?.price_history) {
         throw new Error('Invalid price data received');
       }
       
@@ -56,10 +56,12 @@ export const TokenAnalysis: React.FC = () => {
       const transformedResult = {
         ...result,
         priceData: {
-          current_price: Number(result.priceData[result.priceData.length - 1]?.close) || 0,
-          price_history: result.priceData.map(point => ({
+          current_price: result.priceData.price_history[result.priceData.price_history.length - 1]?.price || 0,
+          price_history: result.priceData.price_history.map((point: any) => ({
             timestamp: point.timestamp,
-            price: Number(point.close)
+            price: typeof point.price === 'string' ? parseFloat(point.price) : point.price,
+            high: typeof point.high === 'string' ? parseFloat(point.high) : point.price,
+            low: typeof point.low === 'string' ? parseFloat(point.low) : point.price
           }))
         }
       };
@@ -231,7 +233,12 @@ export const TokenAnalysis: React.FC = () => {
             <PriceChart 
               data={{
                 current_price: analysisResult.priceData.current_price,
-                price_history: analysisResult.priceData.price_history || []
+                price_history: analysisResult.priceData.price_history.map(point => ({
+                  timestamp: point.timestamp,
+                  price: point.price,
+                  high: point.price * 1.001, // Fallback if high not available
+                  low: point.price * 0.999   // Fallback if low not available
+                }))
               }} 
             />
           </div>

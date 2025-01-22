@@ -182,3 +182,14 @@ class TechnicalAnalyzer:
             ema = (price * multiplier) + (ema * (Decimal('1') - multiplier))
         
         return ema 
+
+"""Technical analysis module using pandas-based implementations.
+
+This module provides technical analysis functionality using native pandas operations
+rather than external libraries. It includes implementations for:
+- RSI (Relative Strength Index)
+- MACD (Moving Average Convergence Divergence)
+- Bollinger Bands
+- Support/Resistance levels
+- Fibonacci retracements
+""" 

@@ -8,7 +8,7 @@ export default function Home() {
         <div className="flex items-center mb-10">
           <Logo />
           <h2 className="text-3xl font-bold text-gray-900 ml-5">
-            Ludo Token Analysis Tool
+            Token Analysis Tool
           </h2>
         </div>
         <TokenAnalysis />

@@ -2,13 +2,10 @@ from abc import ABC, abstractmethod
 import pandas as pd
 from decimal import Decimal
 from typing import Dict, Any
-from web3 import Web3
 
 class BaseProcessor(ABC):
-    def __init__(self, w3: Web3 = None, ethereum_service = None):
-        self.w3 = w3
-        self.ethereum_service = ethereum_service
-        self.eth_price_cache = {}
+    def __init__(self):
+        pass
 
     @abstractmethod
     async def fetch_data(self, contract_address: str, timeframe: str, interval_days: int) -> pd.DataFrame:
@@ -36,7 +33,6 @@ class BaseProcessor(ABC):
         rule_map = {'1m': '1Min', '5m': '5Min', '15m': '15Min', '1h': '1H', '4h': '4H', '1d': '1D'}
         rule = rule_map.get(timeframe, '1H')
         
-        # Preserve Decimal type during resampling
         resampled = df.resample(rule).agg({
             'close': 'last',
             'high': 'max',

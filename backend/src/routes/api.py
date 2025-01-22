@@ -17,15 +17,18 @@ async def analyze_token(request: TokenAnalysisRequest):
         print(f"\n[API] 📊 Analyzing token: {request.contract_address}")
         print(f"[API] ⚙️ Parameters: timeframe={request.timeframe}, interval_days={request.interval_days}")
         
-        df = await price_service.fetch_price_data(
+        price_data = await price_service.get_price_data(
             contract_address=request.contract_address,
             timeframe=request.timeframe,
             interval_days=request.interval_days
         )
         
-        if df.empty:
+        if not price_data or 'priceData' not in price_data:
             return {
-                "priceData": [],
+                "priceData": {
+                    "price_history": [],
+                    "current_price": "0"
+                },
                 "technical_analysis": {
                     "support_levels": [],
                     "resistance_levels": [],
@@ -40,53 +43,50 @@ async def analyze_token(request: TokenAnalysisRequest):
                 "dca_strategy": None
             }
         
-        try:
-            # Calculate technical indicators
-            technical_analysis = price_service.calculate_technical_indicators(df)
-            
-            # Create strategy facade
-            strategy_facade = DCAStrategyFacade(
-                price_data=df,
-                investment_amount=Decimal(str(request.investment_amount)),
-                risk_tolerance=Decimal('0.5')
-            )
-            
-            # Format price data for frontend
-            price_data = df.reset_index()
-            formatted_price_data = [
-                {
-                    "timestamp": record["timestamp"].isoformat() if isinstance(record["timestamp"], pd.Timestamp) else str(record["timestamp"]),
-                    "close": str(Decimal(str(record["close"])).quantize(Decimal('0.00000001'), rounding=ROUND_DOWN))
-                }
-                for record in price_data.to_dict('records')
-            ]
-            
-            # Get analysis results
-            analysis_result = strategy_facade.get_analysis_result(
-                support_levels=technical_analysis['support_levels'],
-                resistance_levels=technical_analysis['resistance_levels'],
-                fibonacci_levels=technical_analysis['fibonacci_levels']
-            )
-            
-            return {
-                "priceData": formatted_price_data,
-                "technical_analysis": technical_analysis,
-                "dca_strategy": analysis_result
+        df = pd.DataFrame([
+            {
+                'timestamp': pd.to_datetime(p['timestamp']),
+                'close': Decimal(str(p['value'])),
+                'high': Decimal(str(p.get('formatted', {}).get('high', p['value']))),
+                'low': Decimal(str(p.get('formatted', {}).get('low', p['value'])))
             }
-            
-        except (InvalidOperation, ValueError, TypeError) as e:
-            print(f"[API] ❌ Calculation error: {str(e)}")
-            raise HTTPException(
-                status_code=400,
-                detail=f"Error in calculations: {str(e)}"
-            )
-            
+            for p in price_data['priceData']['price_history']
+        ]).set_index('timestamp')
+        
+        technical_analysis = price_data['technical_analysis']
+        
+        strategy_facade = DCAStrategyFacade(
+            price_data=df,
+            investment_amount=Decimal(str(request.investment_amount)),
+            risk_tolerance=Decimal('0.5')
+        )
+        
+        analysis_result = strategy_facade.get_analysis_result(
+            support_levels=technical_analysis['support_levels'],
+            resistance_levels=technical_analysis['resistance_levels'],
+            fibonacci_levels=technical_analysis.get('fibonacci_levels', [])
+        )
+        
+        return {
+            "priceData": {
+                "price_history": [
+                    {
+                        'timestamp': p['timestamp'],
+                        'price': p['value'],
+                        'high': p['formatted']['high'],
+                        'low': p['formatted']['low']
+                    }
+                    for p in price_data['priceData']['price_history']
+                ],
+                "current_price": price_data['priceData']['price_history'][-1]['value'] if price_data['priceData']['price_history'] else "0"
+            },
+            "technical_analysis": technical_analysis,
+            "dca_strategy": analysis_result
+        }
+        
     except Exception as e:
         print(f"[API] ❌ Unexpected error: {str(e)}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Analysis failed: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=str(e))
 
 class SentimentAnalysisRequest(BaseModel):
     telegram_channel: str
