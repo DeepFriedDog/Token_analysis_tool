@@ -1,5 +1,4 @@
 import React from 'react';
-import { formatPrice } from '../utils/format';
 import { TechnicalAnalysis } from '../types/analysis';
 
 interface AdvancedIndicatorsProps {
@@ -19,9 +18,9 @@ const InfoIcon: React.FC<{ text: string }> = ({ text }) => (
   </div>
 );
 
-// Helper function to display moving average value or "N/A"
+// Helper function to display moving average value or "N/A" with 8 decimals
 const displayMA = (value?: number) => {
-  return value != null ? '$' + formatPrice(value) : 'N/A';
+  return value != null ? '$' + Number(value).toFixed(8) : 'N/A';
 };
 
 export const AdvancedIndicators: React.FC<AdvancedIndicatorsProps> = ({ analysis, currentPrice }) => {
@@ -41,28 +40,28 @@ export const AdvancedIndicators: React.FC<AdvancedIndicatorsProps> = ({ analysis
           <div className="flex justify-between items-center">
             <span className="text-gray-600">
               SMA 50 
-              <InfoIcon text="Simple Moving Average over the last 50 periods. Calculated as the average of the closing prices over these periods." />
+              <InfoIcon text="Simple Moving Average computed as the average of the closing prices from the last available 50 data points. (If fewer than 50 exist, all available data is used.)" />
             </span>
             <span>{displayMA(ai.sma_50)}</span>
           </div>
           <div className="flex justify-between items-center">
             <span className="text-gray-600">
               EMA 50 
-              <InfoIcon text="Exponential Moving Average over the last 50 periods, giving more weight to recent prices." />
+              <InfoIcon text="Exponential Moving Average computed over the entire series starting from the first available price, using a 50-period smoothing factor." />
             </span>
             <span>{displayMA(ai.ema_50)}</span>
           </div>
           <div className="flex justify-between items-center">
             <span className="text-gray-600">
               SMA 200 
-              <InfoIcon text="Simple Moving Average over the last 200 periods. Used to gauge long-term trends." />
+              <InfoIcon text="Simple Moving Average computed as the average of the closing prices from the last available 200 data points. (If fewer than 200 exist, all available data is used.)" />
             </span>
             <span>{displayMA(ai.sma_200)}</span>
           </div>
           <div className="flex justify-between items-center">
             <span className="text-gray-600">
               EMA 200 
-              <InfoIcon text="Exponential Moving Average over the last 200 periods, emphasizing recent price movement." />
+              <InfoIcon text="Exponential Moving Average computed over the entire series starting from the first available price, using a 200-period smoothing factor." />
             </span>
             <span>{displayMA(ai.ema_200)}</span>
           </div>
@@ -78,21 +77,21 @@ export const AdvancedIndicators: React.FC<AdvancedIndicatorsProps> = ({ analysis
               Line 
               <InfoIcon text="MACD Line: Difference between the 12-period EMA and the 26-period EMA, indicating trend momentum." />
             </span>
-            <span>{ai.macd?.line !== undefined ? Number(ai.macd.line).toFixed(2) : 'N/A'}</span>
+            <span>{ai.macd?.line !== undefined ? Number(ai.macd.line).toFixed(8) : 'N/A'}</span>
           </div>
           <div className="flex justify-between items-center">
             <span className="text-gray-600">
               Signal 
               <InfoIcon text="Signal Line: 9-period EMA of the MACD Line, used for buy/sell signals." />
             </span>
-            <span>{ai.macd?.signal !== undefined ? Number(ai.macd.signal).toFixed(2) : 'N/A'}</span>
+            <span>{ai.macd?.signal !== undefined ? Number(ai.macd.signal).toFixed(8) : 'N/A'}</span>
           </div>
           <div className="flex justify-between items-center">
             <span className="text-gray-600">
               Histogram 
               <InfoIcon text="Histogram: Difference between the MACD Line and the Signal Line, illustrating momentum changes." />
             </span>
-            <span>{ai.macd?.histogram !== undefined ? Number(ai.macd.histogram).toFixed(2) : 'N/A'}</span>
+            <span>{ai.macd?.histogram !== undefined ? Number(ai.macd.histogram).toFixed(8) : 'N/A'}</span>
           </div>
         </div>
       </div>
@@ -106,21 +105,21 @@ export const AdvancedIndicators: React.FC<AdvancedIndicatorsProps> = ({ analysis
               Upper Band 
               <InfoIcon text="Upper Band: Typically calculated as the SMA plus a multiple of the standard deviation." />
             </span>
-            <span>${formatPrice(ai.bollinger_bands?.upper ?? 0)}</span>
+            <span>${Number(ai.bollinger_bands?.upper ?? 0).toFixed(8)}</span>
           </div>
           <div className="flex justify-between items-center">
             <span className="text-gray-600">
               Middle Band 
               <InfoIcon text="Middle Band: Usually the SMA over the period." />
             </span>
-            <span>${formatPrice(ai.bollinger_bands?.middle ?? 0)}</span>
+            <span>${Number(ai.bollinger_bands?.middle ?? 0).toFixed(8)}</span>
           </div>
           <div className="flex justify-between items-center">
             <span className="text-gray-600">
               Lower Band 
               <InfoIcon text="Lower Band: Typically calculated as the SMA minus a multiple of the standard deviation." />
             </span>
-            <span>${formatPrice(ai.bollinger_bands?.lower ?? 0)}</span>
+            <span>${Number(ai.bollinger_bands?.lower ?? 0).toFixed(8)}</span>
           </div>
         </div>
       </div>
@@ -146,7 +145,7 @@ export const AdvancedIndicators: React.FC<AdvancedIndicatorsProps> = ({ analysis
                     }
                   </span>
                   <div className="flex flex-col items-end">
-                    <span className="font-medium">${level.price ? Number(level.price).toFixed(4) : 'N/A'}</span>
+                    <span className="font-medium">${level.price ? Number(level.price).toFixed(8) : 'N/A'}</span>
                     <span className={`text-xs ${isSupport ? 'text-green-600' : 'text-red-600'}`}>
                       {priceDiff > 0 ? '+' : ''}{priceDiff.toFixed(2)}%
                     </span>
@@ -157,18 +156,8 @@ export const AdvancedIndicators: React.FC<AdvancedIndicatorsProps> = ({ analysis
           ) : (
             <div>No Fibonacci data available</div>
           )}
-          <div className="mt-4 pt-3 border-t border-gray-100 text-sm">
-            <div className="text-gray-600">
-              <span className="inline-block w-3 h-3 bg-green-600 rounded-full mr-2"></span>
-              Below current price: Potential buy zones
-            </div>
-            <div className="text-gray-600">
-              <span className="inline-block w-3 h-3 bg-red-600 rounded-full mr-2"></span>
-              Above current price: Possible resistance
-            </div>
-          </div>
         </div>
       </div>
     </div>
   );
-}; 
+};

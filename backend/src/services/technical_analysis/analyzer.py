@@ -184,45 +184,31 @@ class TechnicalAnalyzer:
                 return "Resistance zone - Reduce position size"
 
     def calculate_macd(self) -> Dict:
-        """Calculate MACD (12/26/9 periods)"""
+        """Calculate MACD (12/26/9 periods) using pandas for improved precision"""
         try:
-            # Convert prices to Decimal
-            prices = [Decimal(str(price)) for price in self.price_data['close']]
-            
-            # Calculate EMAs
-            ema12 = self._calculate_ema(prices, 12)
-            ema26 = self._calculate_ema(prices, 26)
-            
-            # Calculate MACD line
-            macd_line = ema12 - ema26
-            
-            # Calculate signal line (9-day EMA of MACD line)
-            signal_line = self._calculate_ema([macd_line], 9)
-            
-            # Calculate histogram
-            histogram = macd_line - signal_line
-            
+            # Convert 'close' prices to float values
+            prices = self.price_data['close'].astype(float)
+            # Calculate the 12-period and 26-period EMAs
+            ema12 = prices.ewm(span=12, adjust=False).mean()
+            ema26 = prices.ewm(span=26, adjust=False).mean()
+            # Compute the MACD line and then the 9-period EMA on the MACD line (signal)
+            macd_series = ema12 - ema26
+            signal_series = macd_series.ewm(span=9, adjust=False).mean()
+            histogram_series = macd_series - signal_series
+
+            # Retrieve the latest values and round to 4 decimal places
+            macd_line = macd_series.iloc[-1]
+            signal_line = signal_series.iloc[-1]
+            histogram = histogram_series.iloc[-1]
+
             return {
-                'line': float(macd_line),
-                'signal': float(signal_line),
-                'histogram': float(histogram)
+                'line': float(round(macd_line, 4)),
+                'signal': float(round(signal_line, 4)),
+                'histogram': float(round(histogram, 4))
             }
         except Exception as e:
             print(f"[Analysis] ⚠️ Error calculating MACD: {str(e)}")
             return {'line': 0, 'signal': 0, 'histogram': 0}
-
-    def _calculate_ema(self, prices: List[Decimal], period: int) -> Decimal:
-        """Calculate Exponential Moving Average"""
-        if len(prices) < period:
-            return Decimal('0')
-        
-        multiplier = Decimal('2') / (Decimal(str(period)) + Decimal('1'))
-        ema = sum(prices[:period]) / Decimal(str(period))
-        
-        for price in prices[period:]:
-            ema = (price * multiplier) + (ema * (Decimal('1') - multiplier))
-        
-        return ema 
 
     def get_advanced_indicators(self) -> dict:
         """
