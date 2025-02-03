@@ -6,7 +6,6 @@ import env from '../config/env';
 import { SentimentAnalysis as SentimentDisplay } from './SentimentAnalysis';
 import { TimeframeSelector } from './TimeframeSelector';
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
-import { TechnicalIndicators } from './TechnicalIndicators';
 import { TechnicalAnalysis } from '../types/analysis';
 import { SignalStatus } from './SignalStatus';
 import { AdvancedIndicators } from './AdvancedIndicators';
@@ -17,6 +16,9 @@ import { PriceChart } from './PriceChart';
 import { EntryZones } from './EntryZones';
 import { validateAnalysisParams } from '../utils/validation';
 import { getTechnicalSignals } from '../utils/technicalSignals';
+import { calculateMovingAverages } from '../utils/indicators';
+import { ChartPriceData } from '../types/price';
+import DCAStrategySection from './DCAStrategySection';
 
 export const TokenAnalysis: React.FC = () => {
   const [analysisParams, setAnalysisParams] = useState<AnalysisParams>({
@@ -49,21 +51,43 @@ export const TokenAnalysis: React.FC = () => {
       console.log('Raw API Response:', result);
       
       if (!result?.priceData?.price_history) {
+        
         throw new Error('Invalid price data received');
       }
       
       // Transform the price data to match the PriceChart component's interface
+      const transformedPriceData: ChartPriceData = {
+        current_price: result.priceData.price_history[result.priceData.price_history.length - 1]?.price || 0,
+        price_history: result.priceData.price_history.map(point => ({
+          timestamp: typeof point.timestamp === 'string' ? parseInt(point.timestamp) : point.timestamp,
+          price: point.price,
+          high: point.price, // Using price as high/low if not available
+          low: point.price
+        }))
+      };
+
+      const movingAverages = calculateMovingAverages(transformedPriceData);
+
       const transformedResult = {
         ...result,
-        priceData: {
-          current_price: result.priceData.price_history[result.priceData.price_history.length - 1]?.price || 0,
-          price_history: result.priceData.price_history.map((point: any) => ({
-            timestamp: point.timestamp,
-            price: typeof point.price === 'string' ? parseFloat(point.price) : point.price,
-            high: typeof point.high === 'string' ? parseFloat(point.high) : point.price,
-            low: typeof point.low === 'string' ? parseFloat(point.low) : point.price
-          }))
-        }
+        technical_analysis: {
+          ...result.technical_analysis,
+          advanced_indicators: {
+            ...result.technical_analysis.advanced_indicators,
+            ...movingAverages
+          },
+          support_levels: result.technical_analysis.support_levels
+            ? result.technical_analysis.support_levels
+                .map(level => parseFloat(level.toString()))
+                .filter(level => !isNaN(level))
+            : [],
+          resistance_levels: result.technical_analysis.resistance_levels
+            ? result.technical_analysis.resistance_levels
+                .map(level => parseFloat(level.toString()))
+                .filter(level => !isNaN(level))
+            : [],
+        },
+        priceData: transformedPriceData
       };
       
       console.log('Transformed result:', transformedResult);
@@ -245,16 +269,20 @@ export const TokenAnalysis: React.FC = () => {
 
           <div className="grid grid-cols-1 gap-6">
             {/* DCA Strategy with Signal Status */}
-            <SignalStatus 
-              analysis={analysisResult?.technical_analysis}
-              currentPrice={analysisResult?.priceData.current_price}
-            />
+            {analysisResult && (
+              <SignalStatus 
+                analysis={analysisResult.technical_analysis}
+                currentPrice={analysisResult.priceData.current_price}
+              />
+            )}
 
-            {/* Technical Indicators */}
-            <TechnicalIndicators
-              analysis={analysisResult?.technical_analysis}
-              currentPrice={analysisResult?.priceData.current_price}
-            />
+            {/* Advanced Technical Analysis */}
+            {analysisResult.technical_analysis && (
+              <AdvancedIndicators
+                analysis={analysisResult.technical_analysis}
+                currentPrice={analysisResult.priceData.current_price}
+              />
+            )}
 
             {/* Entry Zones */}
             <EntryZones
@@ -266,13 +294,8 @@ export const TokenAnalysis: React.FC = () => {
               currentPrice={analysisResult.priceData.current_price}
             />
 
-            {/* Advanced Technical Analysis */}
-            <AdvancedIndicators
-              analysis={analysisResult?.technical_analysis}
-            />
-
             {/* Advanced DCA Strategy */}
-            {analysisResult?.technical_analysis.dca_recommendations && (
+            {analysisResult.technical_analysis.dca_recommendations && (
               <AdvancedDCAStrategy
                 strategy={transformAdvancedDCAStrategy(
                   analysisResult.technical_analysis,
@@ -282,8 +305,20 @@ export const TokenAnalysis: React.FC = () => {
               />
             )}
 
+            {/* DCA Strategy Section */}
+            {analysisResult && (
+              <DCAStrategySection
+                entryPoints={transformDCARecommendations(
+                  analysisResult.technical_analysis,
+                  analysisResult.priceData.current_price,
+                  analysisParams.investmentAmount
+                ).entry_points}
+                currentPrice={analysisResult.priceData.current_price}
+              />
+            )}
+
             {/* Exit Strategy */}
-            {analysisResult?.technical_analysis.exit_signals && (
+            {analysisResult.technical_analysis.exit_signals && (
               <ExitSignals
                 signals={analysisResult.technical_analysis.exit_signals}
                 currentPrice={analysisResult.priceData.current_price}

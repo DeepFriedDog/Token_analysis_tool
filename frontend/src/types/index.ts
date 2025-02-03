@@ -11,11 +11,16 @@ export interface AnalysisResult {
   priceData: {
     current_price: number;
     price_history: Array<{
-      timestamp: string;
+      timestamp: number;
       price: number;
+      high: number;
+      low: number;
     }>;
   };
   technical_analysis: TechnicalAnalysis;
 }
 
-export type { SentimentAnalysis, SentimentAnalysisParams } from './sentiment'; 
+export type { SentimentAnalysis, SentimentAnalysisParams } from './sentiment';
+
+// Re-export ChartPriceData from analysis.ts
+export type { ChartPriceData } from './analysis'; 

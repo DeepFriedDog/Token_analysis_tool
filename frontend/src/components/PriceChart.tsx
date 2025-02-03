@@ -6,7 +6,7 @@ interface Props {
   data: {
     current_price: number;
     price_history: Array<{
-      timestamp: string;
+      timestamp: number;
       price: number;
       high: number;
       low: number;
@@ -25,7 +25,7 @@ export const PriceChart: React.FC<Props> = ({ data }) => {
   }
 
   const chartData = data.price_history.map(point => ({
-    timestamp: typeof point.timestamp === 'string' ? new Date(point.timestamp).getTime() : point.timestamp,
+    timestamp: typeof point.timestamp === 'string' ? Number(point.timestamp) : point.timestamp,
     price: typeof point.price === 'string' ? Number(point.price) : point.price,
     high: typeof point.high === 'string' ? Number(point.high) : point.high,
     low: typeof point.low === 'string' ? Number(point.low) : point.low

@@ -112,10 +112,10 @@ class TechnicalAnalyzer:
                 "trend": trend,
                 "rsi": str(rsi),
                 "volatility": str(volatility),
-                "fibonacci_levels": fibonacci,
                 "advanced_indicators": {
                     "macd": macd,
-                    "bollinger_bands": bollinger
+                    "bollinger_bands": bollinger,
+                    "fibonacci_levels": fibonacci
                 }
             }
         except Exception as e:
@@ -123,24 +123,65 @@ class TechnicalAnalyzer:
             raise
 
     def calculate_fibonacci_levels(self) -> List[Dict]:
-        """Calculate Fibonacci retracement levels"""
+        """Calculate Fibonacci retracement levels using FibonacciAnalyzer"""
         try:
-            high = max(self.price_data['high'])
-            low = min(self.price_data['low'])
-            diff = high - low
+            fib_analyzer = FibonacciAnalyzer(self.price_data)
+            current_price = float(self.price_data['close'].iloc[-1])
+            trend = 'up' if current_price > float(self.price_data['close'].iloc[0]) else 'down'
             
-            levels = [0.236, 0.382, 0.5, 0.618, 0.786]
+            levels = fib_analyzer.calculate_levels(trend)
+            
+            # Sort levels by price for better organization
+            sorted_levels = sorted(levels, key=lambda x: x['price'], reverse=True)
+            
+            # Transform and enrich the output
             return [
                 {
-                    'level': level,
-                    'price': float(high - (diff * Decimal(str(level)))),
-                    'type': 'retracement'
+                    'level': level['level'],
+                    'price': float(level['price']),
+                    'label': level['type'],
+                    'strength': self._calculate_level_strength(float(level['price']), current_price),
+                    'recommendation': self._get_level_recommendation(
+                        float(level['price']), 
+                        current_price, 
+                        level['level']
+                    )
                 }
-                for level in levels
+                for level in sorted_levels
             ]
         except Exception as e:
             print(f"[Analysis] Error calculating Fibonacci levels: {str(e)}")
-            return [] 
+            return []
+
+    def _calculate_level_strength(self, level_price: float, current_price: float) -> float:
+        """Calculate how strong a Fibonacci level is based on historical price action"""
+        try:
+            price_data = self.price_data['close'].astype(float)
+            threshold = 0.01  # 1% range around level
+            touches = sum(1 for price in price_data if abs(price - level_price) / level_price <= threshold)
+            max_touches = len(price_data) * 0.1  # Normalize against 10% of total periods
+            return min(touches / max_touches, 1.0)
+        except Exception:
+            return 0.0
+
+    def _get_level_recommendation(self, level_price: float, current_price: float, fib_ratio: float) -> str:
+        """Generate trading recommendations based on Fibonacci level analysis"""
+        price_diff = ((level_price - current_price) / current_price) * 100
+        
+        if level_price < current_price:
+            if fib_ratio <= 0.382:
+                return "Strong support - Consider for major position entry"
+            elif fib_ratio <= 0.618:
+                return "Moderate support - Good for DCA entry"
+            else:
+                return "Weak support - Small position entry"
+        else:
+            if abs(price_diff) < 5:
+                return "Near resistance - Consider taking partial profits"
+            elif fib_ratio >= 1.618:
+                return "Major resistance - Consider exit"
+            else:
+                return "Resistance zone - Reduce position size"
 
     def calculate_macd(self) -> Dict:
         """Calculate MACD (12/26/9 periods)"""
@@ -182,6 +223,15 @@ class TechnicalAnalyzer:
             ema = (price * multiplier) + (ema * (Decimal('1') - multiplier))
         
         return ema 
+
+    def get_advanced_indicators(self) -> dict:
+        """
+        Gather advanced indicators including MACD and Fibonacci levels.
+        """
+        return {
+            "macd": self.calculate_macd(),
+            "fibonacci_levels": self.calculate_fibonacci_levels()
+        }
 
 """Technical analysis module using pandas-based implementations.
 

@@ -15,6 +15,9 @@ interface AdvancedIndicators {
   volatility?: number;
   sma_50?: number;
   ema_50?: number;
+  sma_200?: number;
+  ema_200?: number;
+  fibonacci_levels?: Array<{ label?: string; price?: number }>;
 }
 
 export interface TechnicalAnalysis {
@@ -22,6 +25,8 @@ export interface TechnicalAnalysis {
     primary_trend: 'bullish' | 'bearish' | 'neutral';
     strength: number;
   };
+  support_levels: number[];
+  resistance_levels: number[];
   dca_recommendations: {
     entry_zones: Array<{
       price_level: number;
@@ -46,4 +51,18 @@ export interface TechnicalAnalysis {
 export interface AnalysisResult {
   priceData: PriceData;
   technical_analysis: TechnicalAnalysis;
+}
+
+// Interface for price chart data points
+export interface ChartPriceData {
+  timestamp: number;
+  price: number;
+  high: number;
+  low: number;
+}
+
+// New interface for DCA Strategy improvements
+export interface DCAStrategy {
+  signalStatus: string;        // e.g. 'Buy', 'Sell', 'Neutral'
+  suggestedPositions: number[];  // Array of suggested entry positions
 } 

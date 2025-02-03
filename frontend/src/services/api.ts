@@ -79,6 +79,12 @@ export const analyzeToken = async (params: AnalysisParams): Promise<AnalysisResu
           primary_trend: 'neutral', 
           strength: 0 
         },
+        support_levels: (data.technical_analysis?.support_levels || [])
+          .map((level: number | string) => parseFloat(String(level)))
+          .filter((level: number) => !isNaN(level)),
+        resistance_levels: (data.technical_analysis?.resistance_levels || [])
+          .map((level: number | string) => parseFloat(String(level)))
+          .filter((level: number) => !isNaN(level)),
         dca_recommendations: data.technical_analysis?.dca_recommendations || {
           entry_zones: [],
           risk_assessment: { overall_risk: 0 }

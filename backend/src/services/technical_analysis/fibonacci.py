@@ -1,7 +1,7 @@
 from .base import BaseTechnicalAnalysis
 from typing import List, Dict
 import pandas as pd
-import numpy as np
+from decimal import Decimal
 
 class FibonacciAnalyzer(BaseTechnicalAnalysis):
     def __init__(self, price_data: pd.DataFrame):
@@ -31,13 +31,15 @@ class FibonacciAnalyzer(BaseTechnicalAnalysis):
         levels = []
 
         for name, ratio in self.fib_ratios.items():
+            # Convert the ratio from float to Decimal for consistent arithmetic
+            ratio_dec = Decimal(str(ratio))
             if trend == 'up':
-                price = swing_low + (price_range * ratio)
+                price = swing_low + (price_range * ratio_dec)
             else:
-                price = swing_high - (price_range * ratio)
+                price = swing_high - (price_range * ratio_dec)
 
             levels.append({
-                'level': ratio,
+                'level': ratio_dec,
                 'price': price,
                 'type': name
             })
