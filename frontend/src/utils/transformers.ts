@@ -43,20 +43,84 @@ export const transformAdvancedDCAStrategy = (
   analysis: TechnicalAnalysis,
   investmentAmount: number
 ) => {
-  const { dca_recommendations } = analysis;
+  const { support_levels, resistance_levels, advanced_indicators } = analysis;
+  const fibonacci_levels = advanced_indicators?.fibonacci_levels;
   const signals = getTechnicalSignals(analysis, 0);
+  const currentPrice = Number(advanced_indicators?.sma_50) || 
+                      Number(advanced_indicators?.ema_50) || 
+                      Number(support_levels?.[0]) || 0;
   
+  // Combine support levels and Fibonacci support levels
+  const allSupportLevels = [...(support_levels || [])];
+  
+  // Add Fibonacci support levels
+  if (fibonacci_levels) {
+    const fibSupports = fibonacci_levels
+      .filter((level: { label?: string; price?: number }) => level.price !== undefined && level.price < currentPrice)
+      .map((level: { label?: string; price?: number }) => level.price!);
+    allSupportLevels.push(...fibSupports);
+  }
+
+  // Add BB lower band as potential support
+  if (advanced_indicators?.bollinger_bands?.lower) {
+    allSupportLevels.push(advanced_indicators.bollinger_bands.lower);
+  }
+
+  const validSupportLevels = Array.from(new Set(allSupportLevels))
+    .filter(level => level < currentPrice)
+    .sort((a, b) => b - a);
+
+  const entry_strategy = validSupportLevels.length ? validSupportLevels.map(level => {
+    const priceDiff = Math.abs(currentPrice - level);
+    const weight = priceDiff / validSupportLevels.reduce((sum, l) => sum + Math.abs(currentPrice - l), 0);
+    
+    // Calculate confidence based on multiple factors
+    let confidence = weight;
+    if (level === advanced_indicators?.bollinger_bands?.lower) {
+      confidence *= 1.2; // Boost confidence for BB support
+    }
+    if (fibonacci_levels?.some((fib: { label?: string; price?: number }) => fib.price === level)) {
+      confidence *= 1.3; // Boost confidence for Fibonacci levels
+    }
+    
+    const allocation = investmentAmount * confidence;
+    
+    return {
+      entry_price: level,
+      allocation: allocation,
+      reasoning: [
+        `Technical support level at ${level}`,
+        ...(level === advanced_indicators?.bollinger_bands?.lower ? ['Bollinger Band support'] : []),
+        ...(fibonacci_levels?.some((fib: { label?: string; price?: number }) => fib.price === level) ? ['Fibonacci support level'] : [])
+      ]
+    };
+  }) : [{
+    entry_price: currentPrice * 0.95,
+    allocation: investmentAmount,
+    reasoning: ['Default entry point at 5% below current price']
+  }];
+
+  // Calculate exit price from resistance levels
+  const validResistance = (resistance_levels || [])
+    .filter(level => level > currentPrice)
+    .sort((a, b) => a - b)[0] || currentPrice * 1.2;
+
+  const dca_strategy = {
+    entry_strategy,
+    exit_strategy: {
+      exit_price: validResistance,
+      sell_percentage: 100
+    }
+  };
+
   return {
-    signals: dca_recommendations.entry_zones.map(zone => ({
-      price: zone.price_level,
-      signal_strength: zone.confidence,
-      position_size: zone.allocation * investmentAmount,
-      reasoning: zone.reasoning || []
+    signals: entry_strategy.map((entry, index) => ({
+      price: entry.entry_price,
+      signal_strength: 1 - (index / entry_strategy.length),
+      position_size: entry.allocation,
+      reasoning: entry.reasoning
     })),
     total_investment: investmentAmount,
-    indicator_signals: {
-      macd: signals.macd_signal,
-      bb: signals.bb_signal
-    }
+    dca_strategy
   };
 }; 

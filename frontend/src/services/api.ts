@@ -90,7 +90,14 @@ export const analyzeToken = async (params: AnalysisParams): Promise<AnalysisResu
           risk_assessment: { overall_risk: 0 }
         },
         advanced_indicators: data.technical_analysis?.advanced_indicators || {},
-        exit_signals: data.technical_analysis?.exit_signals || []
+        exit_signals: data.technical_analysis?.exit_signals || [],
+        dca_strategy: data.technical_analysis?.dca_strategy || {
+          entry_strategy: [],
+          exit_strategy: {
+            sell_percentage: 0,
+            exit_price: 0
+          }
+        }
       }
     };
 
@@ -109,7 +116,7 @@ export const analyzeToken = async (params: AnalysisParams): Promise<AnalysisResu
       if (error.code === 'ECONNABORTED') {
         throw new Error('Request timed out. The analysis is taking longer than expected. Please try again.');
       }
-      const message = error.response?.data?.error || error.message || 'Analysis failed';
+      const message = error.response?.data?.error || error.response?.data?.message || error.message || 'Analysis failed';
       throw new Error(message);
     }
     throw error;

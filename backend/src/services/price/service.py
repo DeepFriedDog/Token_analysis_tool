@@ -6,9 +6,11 @@ from .exceptions import PriceDataError
 from .processors.defillama import DefiLlamaProcessor
 from ..technical_analysis.analyzer import TechnicalAnalyzer
 from decimal import Decimal, ROUND_DOWN, InvalidOperation
+from .processors.ludo import LudoProcessor
 
 class PriceService:
     def __init__(self):
+        self.ludo_processor = LudoProcessor()
         self.defillama_processor = DefiLlamaProcessor()
         pd.set_option('display.float_format', lambda x: f'{x:.8f}')
         pd.set_option('display.precision', 8)
@@ -19,12 +21,27 @@ class PriceService:
             print(f"[Price] 🔍 Analyzing {contract_address}")
             print(f"[Price] ⚙️ Parameters: {timeframe} intervals, {interval_days} days")
             
-            df = await self.defillama_processor.fetch_data(contract_address, timeframe, interval_days)
+            # First try fetching price data using Ludo
+            df = await self.ludo_processor.fetch_data(contract_address, timeframe, interval_days)
+            if not df.empty:
+                print(f"[Ludo] ✅ Found {len(df)} price points")
+            else:
+                print(f"[Price] ⚠️ Ludo returned no data. Falling back to DefiLlama.")
+                df = await self.defillama_processor.fetch_data(contract_address, timeframe, interval_days)
+                if df.empty:
+                    raise PriceDataError("No price data found", "defillama")
+                print(f"[DefiLlama] ✅ Found {len(df)} price points with 8 decimals")
             
-            if df.empty:
-                raise PriceDataError("No price data found", "defillama")
-            
-            print(f"[DefiLlama] ✅ Found {len(df)} price points with 8 decimals")
+            # Validate that the returned price data meets a minimum threshold.
+            # Define expected price points per day for each timeframe.
+            points_per_day = {"15m": 96, "1h": 24, "4h": 6, "1d": 1}
+            # Define a minimal required count for a reliable DCA calculation.
+            min_required = {"15m": 100, "1h": 50, "4h": 30, "1d": 15}
+            if timeframe in points_per_day:
+                if len(df) < min_required[timeframe]:
+                    suggested_days = -(-min_required[timeframe] // points_per_day[timeframe])
+                    print(f"[Price] ⚠️ Insufficient price data: found {len(df)} price points, but at least {min_required[timeframe]} are recommended for timeframe {timeframe}.")
+                    print(f"[Price] Consider increasing interval_days to at least {suggested_days} days for a robust DCA calculation.")
             
             # Convert price columns to Decimal with 8 decimal precision
             for col in ['close', 'high', 'low']:

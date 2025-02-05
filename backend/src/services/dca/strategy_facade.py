@@ -97,20 +97,25 @@ class DCAStrategyFacade:
         try:
             current_price = Decimal(str(self.price_data['close'].iloc[-1]))
             
-            # Calculate entry strategy
-            valid_entries = [Decimal(str(level)) for level in support_levels if Decimal(str(level)) < current_price]
+            # Calculate entry strategy using all provided support levels regardless of current price.
+            support_entries = [Decimal(str(level)) for level in support_levels]
             entry_strategy = []
-            if valid_entries:
-                total_diff = sum([current_price - level for level in valid_entries])
-                for level in valid_entries:
-                    weight = (current_price - level) / total_diff if total_diff != 0 else Decimal('0')
+            if support_entries:
+                total_weight = sum([abs(current_price - level) for level in support_entries])
+                if total_weight == 0:
+                    total_weight = Decimal('1')
+                for level in support_entries:
+                    weight = abs(current_price - level) / total_weight
                     allocation = (self.investment_amount * weight).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
                     entry_strategy.append({
                         "entry_price": float(level),
                         "allocation": float(allocation)
                     })
+            else:
+                print("[DCA Strategy] ⚠️ No support levels provided; using current price as default entry.")
+                entry_strategy = [{"entry_price": float(current_price), "allocation": 100.0}]
             
-            # Calculate exit strategy
+            # Calculate exit strategy using resistance levels and Fibonacci retracement input.
             valid_resistances = [Decimal(str(level)) for level in resistance_levels if Decimal(str(level)) > current_price]
             for fib in fibonacci_levels:
                 fib_price = Decimal(str(fib['price']))
@@ -139,9 +144,23 @@ class DCAStrategyFacade:
                     "exit_price": float(best_exit)
                 }
             
+            # Compute a confidence risk meter based on price volatility.
+            try:
+                volatility = self.basic_calculator.calculate_volatility()
+                if volatility < Decimal('0.05'):
+                    risk_confidence = 0.9
+                elif volatility < Decimal('0.10'):
+                    risk_confidence = 0.7
+                else:
+                    risk_confidence = 0.5
+            except Exception as e:
+                print(f"[DCA Strategy] ⚠️ Could not compute volatility: {str(e)}; defaulting risk confidence to 0.5")
+                risk_confidence = 0.5
+
             return {
                 "entry_strategy": entry_strategy,
-                "exit_strategy": exit_strategy
+                "exit_strategy": exit_strategy,
+                "risk_confidence": risk_confidence
             }
         except Exception as e:
             print(f"[Strategy] ⚠️ Error in get_dca_and_exit_strategy: {str(e)}")

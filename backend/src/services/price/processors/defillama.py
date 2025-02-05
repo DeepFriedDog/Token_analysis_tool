@@ -25,8 +25,10 @@ class DefiLlamaProcessor(BaseProcessor):
                     
                     async with session.get(url) as response:
                         if response.status == 429:  # Rate limit hit
-                            print(f"[DefiLlama] ⚠️ Rate limit reached. Please try again later.")
-                            return pd.DataFrame()
+                            print(f"[DefiLlama] ⚠️ Rate limit reached. Please try again later. Stopping further requests.")
+                            # Set current_time to a value past end_time to break out of the loop
+                            current_time = end_time + 1
+                            break
                         elif response.status == 200:
                             data = await response.json()
                             if data and 'coins' in data and token_id in data['coins']:

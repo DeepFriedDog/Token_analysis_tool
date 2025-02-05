@@ -295,45 +295,14 @@ export const TokenAnalysis: React.FC = () => {
             />
 
             {/* Advanced DCA Strategy */}
-            {analysisResult.technical_analysis.dca_recommendations && (
-              <AdvancedDCAStrategy
-                strategy={transformAdvancedDCAStrategy(
-                  analysisResult.technical_analysis,
-                  analysisParams.investmentAmount
-                )}
-                investmentAmount={analysisParams.investmentAmount}
-              />
-            )}
-
-            {/* DCA Strategy Section */}
-            {analysisResult && (
-              <DCAStrategySection
-                entryPoints={transformDCARecommendations(
-                  analysisResult.technical_analysis,
-                  analysisResult.priceData.current_price,
-                  analysisParams.investmentAmount
-                ).entry_points}
-                currentPrice={analysisResult.priceData.current_price}
-              />
-            )}
-
-            {/* Exit Strategy */}
-            {analysisResult.technical_analysis.exit_signals && (
-              <ExitSignals
-                signals={analysisResult.technical_analysis.exit_signals}
-                currentPrice={analysisResult.priceData.current_price}
-                technicalSignals={{
-                  macd: getTechnicalSignals(
-                    analysisResult.technical_analysis,
-                    analysisResult.priceData.current_price
-                  ).macd_signal,
-                  bb: getTechnicalSignals(
-                    analysisResult.technical_analysis,
-                    analysisResult.priceData.current_price
-                  ).bb_signal
-                }}
-              />
-            )}
+            <AdvancedDCAStrategy
+              strategy={transformAdvancedDCAStrategy(
+                analysisResult.technical_analysis,
+                analysisParams.investmentAmount
+              )}
+              investmentAmount={analysisParams.investmentAmount}
+              currentPrice={analysisResult.priceData.current_price}
+            />
           </div>
         </>
       )}

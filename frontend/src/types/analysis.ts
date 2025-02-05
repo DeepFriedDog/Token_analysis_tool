@@ -20,6 +20,18 @@ interface AdvancedIndicators {
   fibonacci_levels?: Array<{ label?: string; price?: number }>;
 }
 
+export interface AdvancedDCAStrategy {
+  entry_strategy: Array<{
+    entry_price: number;
+    allocation: number;
+    reasoning?: string[];
+  }>;
+  exit_strategy: {
+    sell_percentage: number;
+    exit_price: number;
+  };
+}
+
 export interface TechnicalAnalysis {
   trend_analysis: {
     primary_trend: 'bullish' | 'bearish' | 'neutral';
@@ -46,6 +58,7 @@ export interface TechnicalAnalysis {
     confidence: number;
     reasoning?: string[];
   }>;
+  dca_strategy?: AdvancedDCAStrategy;
 }
 
 export interface AnalysisResult {
